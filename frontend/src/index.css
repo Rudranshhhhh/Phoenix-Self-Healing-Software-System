@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-primary: #090e1a;
+  --bg-secondary: #0d1426;
+  --bg-card: #111827;
+  --bg-card-hover: #1a2236;
+  --border: #1e2d45;
+  --border-bright: #2a3f5f;
+
+  --accent-blue: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --accent-purple: #8b5cf6;
+  --accent-green: #10b981;
+  --accent-yellow: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-orange: #f97316;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+
+  --glow-blue: 0 0 30px rgba(59, 130, 246, 0.15);
+  --glow-red: 0 0 30px rgba(239, 68, 68, 0.15);
+  --glow-green: 0 0 30px rgba(16, 185, 129, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+/* Glass card effect */
+.glass {
+  background: rgba(17, 24, 39, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+.glass-bright {
+  background: rgba(26, 34, 54, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-bright);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-fire {
+  background: linear-gradient(135deg, #f97316 0%, #ef4444 60%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Pulse animations */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.7); }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-slide-in { animation: slide-in-right 0.3s ease-out; }
+.animate-fade-up { animation: fade-in-up 0.4s ease-out; }
+.animate-pulse-glow { animation: pulse-glow 2s infinite; }
+.animate-pulse-red { animation: pulse-red 1.5s infinite; }
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Severity colours */
+.severity-critical { color: #ef4444; }
+.severity-high { color: #f97316; }
+.severity-medium { color: #f59e0b; }
+.severity-low { color: #10b981; }
+
+.bg-severity-critical { background-color: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); }
+.bg-severity-high { background-color: rgba(249,115,22,0.15); border: 1px solid rgba(249,115,22,0.3); }
+.bg-severity-medium { background-color: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); }
+.bg-severity-low { background-color: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); }
+
+/* Status colours */
+.status-resolved { color: #10b981; }
+.status-escalated { color: #ef4444; }
+.status-recovering { color: #f59e0b; }
+.status-detected { color: #06b6d4; }
+.status-diagnosing { color: #8b5cf6; }
+.status-verifying { color: #3b82f6; }

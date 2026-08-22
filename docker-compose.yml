@@ -1,0 +1,188 @@
+version: "3.9"
+
+# =============================================================================
+# Phoenix Self-Healing Platform — Docker Compose
+# Services: phoenix-agent, phoenix-backend, mongodb, sample-backend, postgres, redis
+# =============================================================================
+
+networks:
+  phoenix-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  postgres-data:
+  redis-data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MongoDB (Phoenix persistence layer)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: phoenix-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: phoenix
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - phoenix-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Phoenix Backend (Flask REST API + SocketIO)
+  # ---------------------------------------------------------------------------
+  phoenix-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: phoenix-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FLASK_ENV: development
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-phoenix}
+      SECRET_KEY: ${SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "5000:5000"
+    networks:
+      - phoenix-net
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Phoenix Frontend (Vite + React Dashboard)
+  # ---------------------------------------------------------------------------
+  phoenix-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: phoenix-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_BACKEND_URL: http://localhost:5000
+    networks:
+      - phoenix-net
+    depends_on:
+      phoenix-backend:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Phoenix Agent (the heart — observe/detect/diagnose/recover)
+  # ---------------------------------------------------------------------------
+  phoenix-agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: phoenix-agent
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BACKEND_URL: http://phoenix-backend:5000
+      MONGO_URI: ${MONGO_URI}
+      GROK_API_KEY: ${GROK_API_KEY}
+      GROK_ENABLED: ${GROK_ENABLED:-true}
+      DOCKER_SOCKET: unix:///var/run/docker.sock
+      POLL_DOCKER_SECONDS: ${POLL_DOCKER_SECONDS:-2}
+      POLL_HEALTH_SECONDS: ${POLL_HEALTH_SECONDS:-5}
+      POLL_DB_SECONDS: ${POLL_DB_SECONDS:-10}
+      POLL_REDIS_SECONDS: ${POLL_REDIS_SECONDS:-10}
+      POLL_LOGS_SECONDS: ${POLL_LOGS_SECONDS:-20}
+      ESCALATION_THRESHOLD: ${ESCALATION_THRESHOLD:-3}
+      SAMPLE_BACKEND_URL: http://sample-backend:8080
+      SAMPLE_BACKEND_CONTAINER: phoenix-sample-backend-1
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: sampleuser
+      POSTGRES_PASSWORD: samplepassword
+      POSTGRES_DB: sampledb
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - phoenix-net
+    depends_on:
+      phoenix-backend:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Sample App — intentionally breakable Flask backend
+  # ---------------------------------------------------------------------------
+  sample-backend:
+    build:
+      context: ./sample-app
+      dockerfile: Dockerfile
+    container_name: phoenix-sample-backend-1
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://sampleuser:samplepassword@postgres:5432/sampledb
+      REDIS_URL: redis://redis:6379/0
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - phoenix-net
+    depends_on:
+      - postgres
+      - redis
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL (for sample app)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: phoenix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sampleuser
+      POSTGRES_PASSWORD: samplepassword
+      POSTGRES_DB: sampledb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - phoenix-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sampleuser -d sampledb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis (for sample app)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: phoenix-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - phoenix-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

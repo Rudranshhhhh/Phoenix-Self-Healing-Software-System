@@ -1,0 +1,30 @@
+# Phoenix Agent Dependencies
+# ============================================================
+
+# Core
+pydantic==2.7.4
+pydantic-settings==2.3.4
+
+# Docker
+docker==7.1.0
+
+# HTTP
+requests==2.32.3
+urllib3==2.2.2
+
+# WebSocket (Socket.IO client)
+python-socketio[client]==5.11.3
+websocket-client==1.8.0
+
+# Database connectors
+psycopg2-binary==2.9.9
+redis==5.0.7
+
+# System metrics
+psutil==6.0.0
+
+# MongoDB (for future direct writes from agent)
+pymongo==4.7.3
+
+# Utilities
+python-dotenv==1.0.1
