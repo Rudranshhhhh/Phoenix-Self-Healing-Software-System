@@ -149,6 +149,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -156,6 +158,19 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Archives & Bundles
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Node / Frontend & Backend artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+backend/package-lock.json
 
 # Spyder project settings
 .spyderproject

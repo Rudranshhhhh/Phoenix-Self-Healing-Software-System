@@ -18,10 +18,7 @@ class Config:
     DEBUG: bool = FLASK_ENV == "development"
 
     # MongoDB
-    MONGO_URI: str = os.getenv(
-        "MONGO_URI",
-        "mongodb+srv://dashwanth:Dashwanth%40127@cluster1.modyxw1.mongodb.net/",
-    )
+    MONGO_URI: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
     MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "phoenix")
 
     # CORS
