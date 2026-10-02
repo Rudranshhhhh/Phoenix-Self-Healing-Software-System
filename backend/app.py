@@ -10,6 +10,13 @@ Creates and configures the Flask app with:
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
+
+# Add project root to sys.path so `import backend...` works from any CWD
+_root = str(Path(__file__).resolve().parent.parent)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
 from flask import Flask
 from flask_cors import CORS
@@ -69,6 +76,15 @@ def create_app() -> Flask:
     app.register_blueprint(metrics_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(containers_bp)
+
+    @app.route("/")
+    def index():
+        return {
+            "service": "phoenix-backend",
+            "status": "online",
+            "dashboard_url": "http://localhost:3000",
+            "health_check": "/api/health",
+        }, 200
 
     logger.info("Phoenix Backend: application ready")
     return app
