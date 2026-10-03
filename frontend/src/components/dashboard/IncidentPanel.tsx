@@ -1,252 +1,255 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronRight, GitPullRequest, Sparkles, X } from "lucide-react";
-import type { Incident, RepairStage, Severity } from "../../types/phoenix";
-import { engine } from "../../mock/engine";
+import { useState } from "react";
+import type { ReactNode } from "react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
+import type {
+  Diagnosis,
+  IncidentSource,
+  IncidentSummary,
+  Patch,
+  PullRequest,
+  SourceType,
+  Validation,
+} from "../../types/incident";
+import { useIncident } from "../../hooks/useIncidentList";
 import { since } from "../../lib/format";
+import { statusLabel, statusTone } from "../../lib/status";
+import type { ChipTone } from "../../lib/status";
 import { cn } from "../../lib/cn";
-import { Button } from "../ui/Button";
-import { Chip, Label } from "../ui/Primitives";
+import { Chip, Label, SectionRule } from "../ui/Primitives";
 import { DiffView, TracebackView } from "../code/Traceback";
+import { Steps } from "./Steps";
+
+// Open team decision: do developers see rejected fixes?
+// true while developing; set per the team's answer before the demo.
+const SHOW_REJECTED = true;
 
 // ============================================================================
-// The incident list, and the repair a human has to sign off on.
+// The incident list, read from the Phoenix API.
 // ============================================================================
 
-const SEVERITY_BAR: Record<Severity, string> = {
-  critical: "bg-brick",
-  high: "bg-sodium",
-  medium: "bg-bone-3",
-  low: "bg-bone-4",
+const SOURCE_LABEL: Record<SourceType, string> = {
+  github_actions: "CI",
+  docker_runtime: "Runtime",
 };
 
-type ChipSpec = { tone: "neutral" | "sodium" | "brick" | "jade" | "iris"; text: string };
+/** The row's left bar takes the colour of its status chip. */
+const TONE_BAR: Record<ChipTone, string> = {
+  brick: "bg-brick",
+  iris: "bg-iris",
+  sodium: "bg-sodium",
+  jade: "bg-jade",
+  neutral: "bg-bone-4",
+};
 
-function stageChip(incident: Incident): ChipSpec {
-  switch (incident.stage) {
-    case "open":
-      return { tone: "brick", text: "unrepaired" };
-    case "reproducing":
-      return { tone: "iris", text: "reproducing" };
-    case "patching":
-      return { tone: "iris", text: "writing patch" };
-    case "testing":
-      return { tone: "iris", text: "running tests" };
-    case "awaiting_review":
-      return { tone: "sodium", text: "needs your review" };
-    case "pr_open":
-      return { tone: "jade", text: `pr #${incident.fix?.prNumber ?? "—"}` };
-    case "declined":
-      return { tone: "neutral", text: "declined" };
-    case "unfixable":
-      return { tone: "neutral", text: "unfixable" };
-  }
+const MUTED = "font-mono text-[11px] text-bone-4";
+
+// ---------------------------------------------------------------------------
+// One incident, expanded. Each section appears once its data exists, so a
+// live incident fills in from the top down as the poll picks up new stages.
+// ---------------------------------------------------------------------------
+
+const yesNo = (value: boolean) => (value ? "Yes" : "No");
+
+const PR_TONE: Record<PullRequest["state"], ChipTone> = {
+  open: "jade",
+  merged: "iris",
+  closed: "neutral",
+};
+
+function Pending({ children }: { children: string }) {
+  return <p className={cn(MUTED, "mt-3")}>{children}</p>;
 }
 
-// ---------------------------------------------------------------------------
-// Repair progress: four steps, named for what actually happens.
-// ---------------------------------------------------------------------------
-
-const STEPS: Array<{ stage: RepairStage; label: string; detail: string }> = [
-  { stage: "reproducing", label: "Reproduce", detail: "clone at the failing commit, replay the frame" },
-  { stage: "patching", label: "Patch", detail: "write the smallest change that stops it" },
-  { stage: "testing", label: "Test", detail: "run the full suite against the patch" },
-  { stage: "awaiting_review", label: "Review", detail: "hand it to you" },
-];
-
-const ORDER: RepairStage[] = ["open", "reproducing", "patching", "testing", "awaiting_review"];
-
-function Steps({ stage }: { stage: RepairStage }) {
-  const at = ORDER.indexOf(stage);
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <ol className="grid gap-px overflow-hidden rounded-md border border-ash-800 bg-ash-800 sm:grid-cols-4">
-      {STEPS.map((step, i) => {
-        const index = ORDER.indexOf(step.stage);
-        const done = at > index;
-        const current = at === index;
-        return (
-          <li key={step.stage} className="bg-ash-900 px-4 py-3">
-            <span className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className={cn(
-                  "grid h-4 w-4 shrink-0 place-items-center rounded-xs border font-mono text-[9px]",
-                  done && "border-jade/50 bg-jade/12 text-jade",
-                  current && "border-iris/60 bg-iris/12 text-iris",
-                  !done && !current && "border-ash-700 text-bone-4",
-                )}
-              >
-                {done ? "✓" : i + 1}
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-[12px]",
-                  done ? "text-jade" : current ? "text-iris" : "text-bone-4",
-                )}
-              >
-                {step.label}
-              </span>
-              {current && <span className="animate-caret text-iris">▌</span>}
-            </span>
-            <span className="mt-1.5 block text-[11.5px] leading-snug text-bone-4">{step.detail}</span>
-          </li>
-        );
-      })}
-    </ol>
+    <section className="mt-8">
+      <SectionRule>{title}</SectionRule>
+      {children}
+    </section>
   );
 }
 
-// ---------------------------------------------------------------------------
-// One incident, expanded
-// ---------------------------------------------------------------------------
+function SourceMeta({ source }: { source: IncidentSource }) {
+  return (
+    <p className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-bone-4">
+      {source.workflow_run_url ? (
+        <a
+          href={source.workflow_run_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-bone-3 underline decoration-ash-700 underline-offset-2 hover:text-bone"
+        >
+          CI run <ArrowUpRight size={11} />
+        </a>
+      ) : source.container ? (
+        <span>Container {source.container}</span>
+      ) : null}
+      {source.commit_sha && <span>commit {source.commit_sha.slice(0, 7)}</span>}
+    </p>
+  );
+}
 
-function Detail({ incident, repo }: { incident: Incident; repo: string }) {
-  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-  const [declined, setDeclined] = useState(false);
+function DiagnosisBody({ diagnosis }: { diagnosis: Diagnosis }) {
+  const location =
+    diagnosis.suspect_file &&
+    `${diagnosis.suspect_file}${diagnosis.suspect_line !== null ? `:${diagnosis.suspect_line}` : ""}`;
+  return (
+    <div className="mt-3">
+      <p className="text-[15px] leading-snug text-bone">{diagnosis.root_cause}</p>
+      <p className="mt-2 max-w-3xl text-[13.5px] leading-relaxed text-bone-3">{diagnosis.explanation}</p>
+      <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11.5px]">
+        {location && <span className="text-sodium">{location}</span>}
+        {diagnosis.confidence !== null && (
+          <span className="text-bone-4">{Math.round(diagnosis.confidence * 100)}% confidence</span>
+        )}
+      </p>
+      {diagnosis.context_files.length > 0 && (
+        <div className="mt-3">
+          <Label className="text-bone-4">Context read</Label>
+          <ul className={cn(MUTED, "mt-1.5 space-y-0.5")}>
+            {diagnosis.context_files.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const all = timers.current;
-    return () => all.forEach(clearTimeout);
-  }, []);
+function PatchBody({ patch }: { patch: Patch }) {
+  return (
+    <div className="mt-3">
+      <p className="text-[14px] text-bone-2">{patch.summary}</p>
+      <p className={cn(MUTED, "mt-1.5")}>
+        {patch.files_changed.length} {patch.files_changed.length === 1 ? "file" : "files"} changed:{" "}
+        {patch.files_changed.join(", ")}
+      </p>
+      <div className="mt-3">
+        <DiffView diff={patch.diff} />
+      </div>
+    </div>
+  );
+}
 
-  const runRepair = () => {
-    setDeclined(false);
-    const beats: Array<[RepairStage, number]> = [
-      ["reproducing", 0],
-      ["patching", 1600],
-      ["testing", 3400],
-      ["awaiting_review", 5700],
-    ];
-    for (const [stage, at] of beats) {
-      timers.current.push(setTimeout(() => engine.setStage(incident.id, stage), at));
-    }
-  };
+function ValidationBody({ validation }: { validation: Validation }) {
+  const pass = validation.result === "PASS";
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Chip tone={pass ? "jade" : "brick"}>{validation.result}</Chip>
+        <span className="font-mono text-[12.5px] text-bone-2">
+          {validation.tests_passed}/{validation.tests_run} tests passed
+        </span>
+        <span className={MUTED}>
+          {validation.duration_seconds.toFixed(1)}s · finished {since(validation.finished_at)}
+        </span>
+      </div>
 
-  const openPr = () => {
-    engine.setStage(incident.id, "pr_open", { prNumber: 1200 + Math.floor(incident.count % 90) });
-  };
+      {!pass && validation.rejection_reason && (
+        <div className="mt-3 rounded-md border border-brick/35 bg-brick/8 px-4 py-3">
+          <Label className="text-brick">Rejected</Label>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-bone">{validation.rejection_reason}</p>
+        </div>
+      )}
 
-  const decline = () => {
-    setDeclined(true);
-    engine.setStage(incident.id, "declined");
-  };
+      <dl className="mt-3 grid gap-x-6 gap-y-1 font-mono text-[11.5px] sm:grid-cols-[auto_1fr]">
+        <dt className="text-bone-4">Bug reproduced before patch</dt>
+        <dd className="text-bone-2">{yesNo(validation.bug_reproduced_before_patch)}</dd>
+        <dt className="text-bone-4">Bug still reproduces after patch</dt>
+        <dd className={validation.bug_reproduces_after_patch ? "text-brick" : "text-bone-2"}>
+          {yesNo(validation.bug_reproduces_after_patch)}
+        </dd>
+      </dl>
 
-  const working =
-    incident.stage === "reproducing" || incident.stage === "patching" || incident.stage === "testing";
+      <details className="group mt-4 rounded-md border border-ash-800 bg-ash-925">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2 font-mono text-[11px] text-bone-3 hover:text-bone [&::-webkit-details-marker]:hidden">
+          <ChevronRight size={12} className="transition-transform duration-200 group-open:rotate-90" />
+          Test output
+        </summary>
+        <pre className="mono-pane max-h-[320px] overflow-auto border-t border-ash-800 px-4 py-3 text-bone-3">
+          {validation.output}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
+function PullRequestBody({ pr }: { pr: PullRequest }) {
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <a
+        href={pr.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-[14px] text-bone underline decoration-ash-700 underline-offset-2 hover:decoration-bone-3"
+      >
+        Pull request #{pr.number} <ArrowUpRight size={13} />
+      </a>
+      <span className="font-mono text-[11.5px] text-bone-3">{pr.branch}</span>
+      <Chip tone={PR_TONE[pr.state]}>{pr.state}</Chip>
+    </p>
+  );
+}
+
+function Detail({ id }: { id: string }) {
+  const { incident, error } = useIncident(id);
+
+  if (!incident) {
+    return (
+      <div className="border-t border-ash-800 bg-ash-925 px-4 py-6 sm:px-6">
+        <p className={MUTED}>{error ? `Couldn't load ${id}. Retrying…` : "Loading…"}</p>
+      </div>
+    );
+  }
+
+  const { status, diagnosis, patch, validation, pull_request } = incident;
 
   return (
     <div className="border-t border-ash-800 bg-ash-925 px-4 py-6 sm:px-6">
-      {/* -- context ------------------------------------------------------ */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
-        <div className="min-w-0">
-          <Label>Captured traceback</Label>
-          <TracebackView incident={incident} className="mt-3" />
-        </div>
+      {error && <p className={cn(MUTED, "mb-3")}>Connection lost, retrying…</p>}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 self-start lg:grid-cols-1">
-          {[
-            ["Entry point", `${incident.request.method} ${incident.request.path}`],
-            ["Response", incident.request.status === 0 ? "task failed" : String(incident.request.status)],
-            ["Release", incident.request.releaseSha],
-            ["Client", incident.request.userAgent],
-            ["First seen", since(incident.firstSeen)],
-            ["Events", `${incident.count} · ${incident.usersAffected} users`],
-          ].map(([term, value]) => (
-            <div key={term}>
-              <dt className="ledger-label">{term}</dt>
-              <dd className="tnum mt-1 truncate text-[12px] text-bone-2">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
+      <Steps status={status} />
 
-      <hr className="rule my-6" />
+      <Section title="Error">
+        <TracebackView error={incident.error} className="mt-3" />
+        <SourceMeta source={incident.source} />
+      </Section>
 
-      {/* -- repair ------------------------------------------------------- */}
-      {incident.stage === "unfixable" ? (
-        <div className="rounded-md border border-brick/25 bg-brick/6 p-5">
-          <Label className="text-brick">Phoenix stopped here</Label>
-          <p className="mt-2.5 max-w-[52rem] text-[14px] leading-relaxed text-bone-2">{incident.note}</p>
-        </div>
-      ) : incident.stage === "declined" || declined ? (
-        <div className="flex flex-wrap items-center gap-4">
-          <p className="text-[14px] text-bone-2">
-            You declined this patch. The incident stays open and nothing was pushed.
-          </p>
-          <Button className="ml-auto" onClick={runRepair}>
-            Try a different patch
-          </Button>
-        </div>
-      ) : incident.stage === "open" ? (
-        <div className="flex flex-wrap items-end gap-6">
-          <div className="max-w-[40rem]">
-            <Label>No repair attempted</Label>
-            <p className="mt-2.5 text-[14px] leading-relaxed text-bone-2">
-              Phoenix will clone <span className="font-mono text-[13px] text-bone">{repo}</span> at{" "}
-              <span className="font-mono text-[13px] text-bone">{incident.request.releaseSha}</span> into a
-              sandbox, replay this frame, and try to write a patch. Nothing is pushed until you read the diff.
-            </p>
-          </div>
-          <Button tone="primary" size="lg" className="ml-auto" onClick={runRepair}>
-            <Sparkles size={15} />
-            Fix this
-          </Button>
-        </div>
-      ) : working ? (
-        <div>
-          <Label className="text-iris">Repairing</Label>
-          <div className="mt-3">
-            <Steps stage={incident.stage} />
-          </div>
-        </div>
-      ) : incident.fix ? (
-        <div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Label className={incident.stage === "pr_open" ? "text-jade" : "text-sodium"}>
-              {incident.stage === "pr_open" ? "Pull request open" : "Patch ready for review"}
-            </Label>
-            <Chip tone="jade">
-              {incident.fix.testsPassed}/{incident.fix.testsRun} tests pass
-            </Chip>
-            <span className="font-mono text-[11.5px] text-bone-3">{incident.fix.branch}</span>
-          </div>
+      {diagnosis ? (
+        <Section title="Root cause">
+          <DiagnosisBody diagnosis={diagnosis} />
+        </Section>
+      ) : status === "diagnosing" ? (
+        <Section title="Root cause">
+          <Pending>Diagnosing…</Pending>
+        </Section>
+      ) : null}
 
-          <h4 className="mt-4 font-sans text-[15.5px] font-medium tracking-normal text-bone">
-            {incident.fix.summary}
-          </h4>
-          <p className="mt-2 max-w-[54rem] text-[14px] leading-relaxed text-bone-2">
-            {incident.fix.reasoning}
-          </p>
+      {patch && (
+        <Section title="Proposed patch">
+          <PatchBody patch={patch} />
+        </Section>
+      )}
 
-          <div className="mt-5">
-            <DiffView hunks={incident.fix.hunks} />
-          </div>
+      {validation ? (
+        <Section title="Validation">
+          <ValidationBody validation={validation} />
+        </Section>
+      ) : status === "validating" ? (
+        <Section title="Validation">
+          <Pending>Running tests in the sandbox…</Pending>
+        </Section>
+      ) : null}
 
-          {incident.stage === "awaiting_review" ? (
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Button tone="primary" size="lg" onClick={openPr}>
-                <GitPullRequest size={15} />
-                Open pull request
-              </Button>
-              <Button tone="danger" size="lg" onClick={decline}>
-                <X size={15} />
-                Decline
-              </Button>
-              <span className="font-mono text-[11.5px] text-bone-4">
-                Opening a pull request pushes {incident.fix.branch}. It does not merge.
-              </span>
-            </div>
-          ) : (
-            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-md border border-jade/25 bg-jade/6 px-4 py-3">
-              <GitPullRequest size={15} className="text-jade" />
-              <span className="font-mono text-[12.5px] text-jade">
-                #{incident.fix.prNumber} on {incident.fix.branch}
-              </span>
-              <span className="text-[13.5px] text-bone-2">
-                Pushed to {repo}. Review and merge it in GitHub when you're ready.
-              </span>
-            </div>
-          )}
-        </div>
+      {pull_request ? (
+        <Section title="Pull request">
+          <PullRequestBody pr={pull_request} />
+        </Section>
+      ) : status === "validated" ? (
+        <Section title="Pull request">
+          <Pending>Passed validation. No pull request yet.</Pending>
+        </Section>
       ) : null}
     </div>
   );
@@ -256,10 +259,35 @@ function Detail({ incident, repo }: { incident: Incident; repo: string }) {
 // The list
 // ---------------------------------------------------------------------------
 
-export function IncidentList({ incidents, repo }: { incidents: Incident[]; repo: string }) {
-  const [open, setOpen] = useState<string | null>(incidents[0]?.id ?? null);
+export function IncidentList({
+  incidents,
+  error,
+  loading,
+}: {
+  incidents: IncidentSummary[];
+  error: Error | null;
+  loading: boolean;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
 
-  if (incidents.length === 0) {
+  if (loading) {
+    return <p className={MUTED}>Loading incidents…</p>;
+  }
+
+  if (error && incidents.length === 0) {
+    return (
+      <div className="rounded-lg border border-ash-800 bg-ash-900 px-6 py-16 text-center">
+        <p className="text-[15px] text-bone-2">
+          Can't reach the Phoenix API. Is phoenix-api running on port 8000?
+        </p>
+        <p className="mt-2 font-mono text-[11.5px] text-bone-4">{error.message}</p>
+      </div>
+    );
+  }
+
+  const visible = SHOW_REJECTED ? incidents : incidents.filter((i) => i.status !== "rejected");
+
+  if (visible.length === 0) {
     return (
       <div className="rounded-lg border border-ash-800 bg-ash-900 px-6 py-16 text-center">
         <p className="text-[15px] text-bone-2">Nothing has thrown since the reporter attached.</p>
@@ -271,58 +299,56 @@ export function IncidentList({ incidents, repo }: { incidents: Incident[]; repo:
   }
 
   return (
-    <ul className="overflow-hidden rounded-lg border border-ash-800">
-      {incidents.map((incident, i) => {
-        const chip = stageChip(incident);
-        const open_ = open === incident.id;
-        return (
-          <li key={incident.id} className={cn(i > 0 && "border-t border-ash-800")}>
-            <button
-              type="button"
-              onClick={() => setOpen(open_ ? null : incident.id)}
-              aria-expanded={open_}
-              className={cn(
-                "flex w-full items-start gap-4 px-4 py-4 text-left transition-colors sm:px-5",
-                open_ ? "bg-ash-850" : "bg-ash-900 hover:bg-ash-850/70",
-              )}
-            >
-              <span
-                aria-hidden
-                className={cn("mt-1 h-8 w-[2px] shrink-0 rounded-xs", SEVERITY_BAR[incident.severity])}
-              />
+    <div>
+      {error && <p className={cn(MUTED, "mb-3")}>Connection lost, retrying…</p>}
 
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                  <span className="font-mono text-[13.5px] font-medium text-brick">
-                    {incident.exception}
+      <ul className="overflow-hidden rounded-lg border border-ash-800">
+        {visible.map((incident, i) => {
+          const tone = statusTone(incident.status);
+          const open_ = open === incident.id;
+          return (
+            <li key={incident.id} className={cn(i > 0 && "border-t border-ash-800")}>
+              <button
+                type="button"
+                onClick={() => setOpen(open_ ? null : incident.id)}
+                aria-expanded={open_}
+                className={cn(
+                  "flex w-full items-start gap-4 px-4 py-4 text-left transition-colors sm:px-5",
+                  open_ ? "bg-ash-850" : "bg-ash-900 hover:bg-ash-850/70",
+                )}
+              >
+                <span aria-hidden className={cn("mt-1 h-8 w-[2px] shrink-0 rounded-xs", TONE_BAR[tone])} />
+
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                    <span className="font-mono text-[13.5px] font-medium text-brick">
+                      {incident.exception_type}
+                    </span>
+                    <span className="min-w-0 truncate font-mono text-[13px] text-bone-2">
+                      {incident.message}
+                    </span>
                   </span>
-                  <span className="min-w-0 truncate font-mono text-[13px] text-bone-2">
-                    {incident.message}
+                  <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-bone-4">
+                    <span>{incident.id}</span>
+                    <span>{SOURCE_LABEL[incident.source_type]}</span>
+                    <span>updated {since(incident.updated_at)}</span>
                   </span>
                 </span>
-                <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-bone-4">
-                  <span>{incident.id}</span>
-                  <span>{incident.service}</span>
-                  <span>
-                    {incident.count} events · {incident.usersAffected} users
-                  </span>
-                  <span>last {since(incident.lastSeen)}</span>
+
+                <span className="flex shrink-0 items-center gap-3 pt-0.5">
+                  <Chip tone={tone}>{statusLabel(incident.status)}</Chip>
+                  <ChevronRight
+                    size={15}
+                    className={cn("text-bone-4 transition-transform duration-200", open_ && "rotate-90")}
+                  />
                 </span>
-              </span>
+              </button>
 
-              <span className="flex shrink-0 items-center gap-3 pt-0.5">
-                <Chip tone={chip.tone}>{chip.text}</Chip>
-                <ChevronRight
-                  size={15}
-                  className={cn("text-bone-4 transition-transform duration-200", open_ && "rotate-90")}
-                />
-              </span>
-            </button>
-
-            {open_ && <Detail incident={incident} repo={repo} />}
-          </li>
-        );
-      })}
-    </ul>
+              {open_ && <Detail id={incident.id} />}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

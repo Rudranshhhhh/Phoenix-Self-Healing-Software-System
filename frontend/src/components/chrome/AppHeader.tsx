@@ -51,7 +51,7 @@ export function AppHeader({
           <span className="flex items-center gap-2">
             <Dot tone={live ? "healthy" : "offline"} pulse={live} />
             <Label className={live ? "text-jade" : "text-bone-4"}>
-              {live ? "Live · 1.5s" : "No reports"}
+              {live ? "Live · 2.5s" : "No reports"}
             </Label>
           </span>
           {user && (
