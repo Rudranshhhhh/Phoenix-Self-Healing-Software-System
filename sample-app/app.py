@@ -33,7 +33,6 @@ _memory_leak_bucket = []
 
 @app.get("/health")
 def health():
-    global _is_healthy
     if _is_healthy:
         return jsonify({"status": "healthy", "service": "sample-backend"}), 200
     else:
@@ -68,7 +67,6 @@ def crash():
 def leak():
     logger.warning("💧 Sample App: Simulating memory leak...")
     # Allocate approximately 150MB of memory by appending large strings
-    global _memory_leak_bucket
     for i in range(15):
         # ~10MB string replication
         _memory_leak_bucket.append("X" * (10 * 1024 * 1024))
@@ -79,6 +77,7 @@ def leak():
 @app.get("/cpu")
 def cpu_spike():
     logger.warning("🔥 Sample App: Simulating CPU spike...")
+
     # Spawn a background thread that does intensive calculations indefinitely
     def _cpu_burner():
         logger.info("🔥 Background burner started")
@@ -86,7 +85,6 @@ def cpu_spike():
             # Busy-wait loop
             _ = 23908 * 92384
 
-    import threading
     t = threading.Thread(target=_cpu_burner, daemon=True)
     t.start()
     return jsonify({"message": "CPU burner thread launched."}), 200

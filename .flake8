@@ -10,6 +10,6 @@ exclude =
     frontend,
     future,
     .claude
-extend-ignore = E203, W503, F401
+extend-ignore = E203, W503, F401, E402
 per-file-ignores =
     __init__.py: F401
