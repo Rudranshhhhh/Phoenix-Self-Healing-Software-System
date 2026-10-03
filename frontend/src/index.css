@@ -40,14 +40,31 @@
 
   /* -- type -------------------------------------------------------------- */
   --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
-  --font-sans: "Instrument Sans", system-ui, -apple-system, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   /* -- radii: crisp, never pill ------------------------------------------ */
   --radius-xs: 2px;
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-lg: 8px;
+
+  /* -- redesign (warm grey): these win over the Ledger values above ------- */
+  --color-page: #E8E4E1;
+  --color-surface: #F4F1EE;
+  --color-subtle: #ECE8E4;
+  --color-code: #FBF9F7;
+  --color-line: #D5CEC8;
+  --color-ink: #000000;
+  --color-body: #1F2328;
+  --color-muted: #57606A;
+  --color-ember: #FF4F12;
+  --color-pass: #1A7F37;
+  --color-fail: #CF222E;
+  --color-add-bg: #E6FFEC;
+  --color-del-bg: #FFEBE9;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-dot: "Doto", ui-monospace, monospace;
+  --radius-box: 6px;
 
   /* -- motion ------------------------------------------------------------ */
   --animate-sweep: sweep 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -110,7 +127,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
-  scrollbar-color: var(--color-ash-700) var(--color-ash-950);
+  scrollbar-color: #C9C2BC transparent;
 }
 
 body {
@@ -126,20 +143,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Redesign base. Comes after the Ledger body rule so it wins. */
+body {
+  background: var(--color-page);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+}
+
 #root {
   min-height: 100vh;
   isolation: isolate;
 }
 
-h1,
-h2,
-h3 {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.024em;
-  line-height: 1.02;
-  margin: 0;
-  text-wrap: balance;
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.024em;
+    line-height: 1.02;
+    margin: 0;
+    text-wrap: balance;
+  }
 }
 
 p {
@@ -148,8 +174,8 @@ p {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-sodium) 30%, transparent);
-  color: var(--color-bone);
+  background: #D5CEC8;
+  color: #000;
 }
 
 ::-webkit-scrollbar {
@@ -157,22 +183,23 @@ p {
   height: 9px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-ash-950);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-ash-700);
-  border: 2px solid var(--color-ash-950);
+  background: #C9C2BC;
+  background-clip: padding-box;
+  border: 2px solid transparent;
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-ash-600);
+  background: #B3ABA4;
+  background-clip: padding-box;
 }
 
 /* Keyboard focus is always visible; pointer focus never draws a ring. */
 :focus-visible {
-  outline: 2px solid var(--color-sodium);
+  outline: 2px solid #000;
   outline-offset: 2px;
-  border-radius: 2px;
 }
 
 /* ==========================================================================
@@ -305,4 +332,79 @@ p {
     opacity: 1;
     transform: none;
   }
+}
+
+/* Phoenix chick: one-shot reactions, replayed when the mood changes */
+.chick-hop { animation: chick-hop .55s ease-out; }
+.chick-wob { transform-origin: 50% 85%; animation: chick-wob .9s ease-in-out; }
+.chick-spin { transform-box: fill-box; transform-origin: center; animation: chick-spin .9s ease-out; }
+.chick-blink { transform-box: fill-box; transform-origin: center; animation: chick-blink .45s .35s ease-in-out; }
+.chick-pop { transform-box: fill-box; transform-origin: center; animation: chick-pop .35s .15s ease-out both; }
+.chick-pop2 { transform-box: fill-box; transform-origin: center; animation: chick-pop .35s .35s ease-out both; }
+.chick-zz { animation: chick-zz 1.2s .1s ease-out both; }
+@keyframes chick-hop { 0%{transform:none} 30%{transform:translateY(-10px)} 60%{transform:none} 80%{transform:translateY(-3px)} 100%{transform:none} }
+@keyframes chick-wob { 0%{transform:none} 25%{transform:rotate(-7deg)} 50%{transform:rotate(6deg)} 75%{transform:rotate(-3deg)} 100%{transform:none} }
+@keyframes chick-spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+@keyframes chick-blink { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(.1)} }
+@keyframes chick-pop { from{opacity:0;transform:scale(.3)} to{opacity:1;transform:none} }
+@keyframes chick-zz { from{opacity:0;transform:translate(-4px,6px)} to{opacity:1;transform:none} }
+@media (prefers-reduced-motion: reduce) {
+  .chick-hop, .chick-wob, .chick-spin, .chick-blink, .chick-pop, .chick-pop2, .chick-zz { animation: none; }
+}
+
+/* Pipeline arc (Nothing-style dial) */
+.phx-arc { position: relative; height: 310px; overflow: hidden; --arc-r: 1100px; --arc-step: 10deg; --arc-fy: 156px; }
+.phx-arc-wbox { position: absolute; inset: 0; }
+.phx-arc-wheel { position: absolute; left: 50%; top: var(--arc-fy); width: calc(var(--arc-r) * 2); height: calc(var(--arc-r) * 2); margin-left: calc(var(--arc-r) * -1); border-radius: 50%; transition: transform .45s cubic-bezier(.34, 1.4, .64, 1); }
+.phx-arc-spoke { position: absolute; left: 50%; top: 0; width: 0; height: 100%; transition: opacity .35s ease; }
+.phx-arc-dot { position: absolute; left: 0; top: 0; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); transition: width .3s, height .3s, background-color .3s, border-color .3s, outline-color .3s; }
+.is-past .phx-arc-dot { background: #1F2328; }
+.is-future .phx-arc-dot { background: #fff; border: 2px solid #57606A; }
+.is-current .phx-arc-dot { width: 22px; height: 22px; background: #FF4F12; outline: 2px solid #FF4F12; outline-offset: 4px; }
+.is-rejected .phx-arc-dot { width: 24px; height: 24px; background: #fff; border: 2.5px solid #CF222E; }
+.is-rejected .phx-arc-dot::before, .is-rejected .phx-arc-dot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 2.5px; border-radius: 1px; background: #CF222E; }
+.is-rejected .phx-arc-dot::before { transform: translate(-50%, -50%) rotate(45deg); }
+.is-rejected .phx-arc-dot::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.phx-arc-num { position: absolute; left: 0; top: -34px; transform: translateX(-50%); font-size: 11px; color: #57606A; font-variant-numeric: tabular-nums; }
+.phx-arc-name { position: absolute; left: 0; top: 22px; transform: translateX(-50%); white-space: nowrap; font-size: 13px; font-weight: 500; color: #1F2328; }
+.is-current .phx-arc-num, .is-current .phx-arc-name, .is-rejected .phx-arc-num, .is-rejected .phx-arc-name { visibility: hidden; }
+.phx-arc-tick { position: absolute; left: 0; top: 0; width: 4px; height: 4px; border-radius: 50%; background: #BDB6B0; transform: translate(-50%, -50%); }
+.is-done .phx-arc-tick { background: #1F2328; }
+.phx-arc-tick2 { position: absolute; left: 0; top: -16px; width: 2px; height: 2px; border-radius: 50%; background: #A39C96; transform: translate(-50%, -50%); }
+.phx-arc-ring { position: absolute; border-radius: 50%; pointer-events: none; }
+.phx-arc-ring.r0 { inset: -46px; border: 1px dashed rgba(0,0,0,.12); }
+.phx-arc-ring.r1 { inset: 64px; border: 1px solid rgba(0,0,0,.07); }
+.phx-arc-ring.r2 { inset: 132px; border: 1px dotted rgba(0,0,0,.14); }
+.phx-arc-ring.r3 { inset: 220px; border: 1px solid rgba(0,0,0,.05); }
+.phx-arc-ghost { position: absolute; left: 0; right: 0; bottom: -34px; text-align: center; font-size: 172px; line-height: 1; font-weight: 400; color: rgba(0,0,0,.035); white-space: nowrap; pointer-events: none; user-select: none; }
+.phx-arc-needle { position: absolute; left: 50%; top: 0; width: 1px; height: calc(var(--arc-fy) - 134px); background: rgba(0,0,0,.14); }
+.phx-arc-cross { position: absolute; width: 11px; height: 11px; }
+.phx-arc-cross::before, .phx-arc-cross::after { content: ""; position: absolute; background: #A39C96; }
+.phx-arc-cross::before { left: 5px; top: 0; width: 1px; height: 11px; }
+.phx-arc-cross::after { left: 0; top: 5px; width: 11px; height: 1px; }
+.phx-arc-cross.x1 { left: 0; top: 6px; } .phx-arc-cross.x2 { right: 0; top: 6px; }
+.phx-arc-cross.x3 { left: 0; bottom: 6px; } .phx-arc-cross.x4 { right: 0; bottom: 6px; }
+.phx-arc-coord { position: absolute; top: 6px; font-family: var(--font-mono); font-size: 10px; color: #8F8780; }
+.phx-arc-coord.c1 { left: 18px; } .phx-arc-coord.c2 { right: 18px; }
+.phx-arc-char { position: absolute; left: 50%; top: calc(var(--arc-fy) - 112px); width: 96px; height: 96px; margin-left: -48px; }
+.phx-arc-fdot { position: absolute; left: 50%; top: var(--arc-fy); width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #57606A; }
+.phx-arc-label { position: absolute; left: 0; right: 0; top: calc(var(--arc-fy) + 26px); text-align: center; font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: .02em; color: #000; }
+.phx-arc-label.is-rejected-label { color: #CF222E; }
+.phx-arc-step { position: absolute; left: 0; right: 0; top: calc(var(--arc-fy) + 66px); text-align: center; font-size: 12px; color: #57606A; font-variant-numeric: tabular-nums; }
+.phx-fade-a { animation: phx-fade-a .35s ease-out; }
+.phx-fade-b { animation: phx-fade-b .35s ease-out; }
+@keyframes phx-fade-a { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes phx-fade-b { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes phx-op-a { from { opacity: 0; } to { opacity: 1; } }
+@keyframes phx-op-b { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 640px) {
+  .phx-arc { height: 280px; --arc-r: 600px; --arc-step: 15deg; --arc-fy: 146px; }
+  .phx-arc-label { font-size: 26px; }
+  .phx-arc-ghost { font-size: 86px; bottom: -14px; }
+  .phx-arc-coord { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phx-arc-wheel, .phx-arc-spoke, .phx-arc-dot { transition: none; }
+  .phx-arc-wbox.wa, .phx-fade-a { animation: phx-op-a .3s ease-out; }
+  .phx-arc-wbox.wb, .phx-fade-b { animation: phx-op-b .3s ease-out; }
 }
