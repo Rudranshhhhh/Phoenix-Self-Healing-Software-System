@@ -28,7 +28,7 @@ export function SiteHeader() {
     >
       <div className="mx-auto flex h-16 max-w-[1180px] items-center gap-8 px-5 sm:px-8">
         <Link to="/" aria-label="Phoenix home" className="shrink-0">
-          <Wordmark />
+          <Wordmark style={{ color: "var(--color-bone)" }} />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -69,7 +69,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-[1180px] px-5 py-12 sm:px-8">
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
-            <Wordmark />
+            <Wordmark style={{ color: "var(--color-bone)" }} />
             <p className="mt-3 text-[14px] leading-relaxed text-bone-3">
               A traceback goes in. A reviewed pull request comes out. Nothing in between happens without
               someone saying yes.

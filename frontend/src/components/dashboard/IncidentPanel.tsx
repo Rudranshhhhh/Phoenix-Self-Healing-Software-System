@@ -18,10 +18,7 @@ import { cn } from "../../lib/cn";
 import { Chip, Label, SectionRule } from "../ui/Primitives";
 import { DiffView, TracebackView } from "../code/Traceback";
 import { Steps } from "./Steps";
-
-// Open team decision: do developers see rejected fixes?
-// true while developing; set per the team's answer before the demo.
-const SHOW_REJECTED = true;
+import { SHOW_REJECTED } from "../../lib/flags";
 
 // ============================================================================
 // The incident list, read from the Phoenix API.
@@ -192,7 +189,7 @@ function PullRequestBody({ pr }: { pr: PullRequest }) {
   );
 }
 
-function Detail({ id }: { id: string }) {
+export function Detail({ id }: { id: string }) {
   const { incident, error } = useIncident(id);
 
   if (!incident) {

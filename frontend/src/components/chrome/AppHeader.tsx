@@ -1,16 +1,22 @@
 import { Link } from "react-router-dom";
-import { ChevronsUpDown, GitBranch } from "lucide-react";
-import { Mark } from "../brand/Wordmark";
-import { Chip, Dot, Label } from "../ui/Primitives";
+import { Wordmark } from "../brand/Wordmark";
+import { REPO } from "../../lib/repo";
+
+function LiveIndicator({ live }: { live: boolean }) {
+  return (
+    <span className="ml-auto flex items-center gap-2 text-sm text-body">
+      <span
+        aria-hidden="true"
+        className={live ? "size-2 rounded-full bg-ember" : "size-2 rounded-full border-[1.5px] border-muted"}
+      />
+      {live ? "Live" : "Offline"}
+    </span>
+  );
+}
 
 /** Slim chrome for the monitoring view. Deliberately quieter than the site header. */
 export function AppHeader({
-  owner,
-  repo,
-  branch,
-  release,
   live,
-  user,
 }: {
   owner: string;
   repo: string;
@@ -20,46 +26,54 @@ export function AppHeader({
   user?: string;
 }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-ash-800 bg-ash-950/92 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1420px] items-center gap-4 px-4 sm:px-6">
-        <Link to="/" aria-label="Phoenix home" className="shrink-0 text-bone">
-          <Mark size={20} />
+    <header className="border-b border-line">
+      <div className="mx-auto flex min-h-[60px] max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
+        <Link to="/" aria-label="Phoenix home">
+          <Wordmark />
         </Link>
-
-        <span aria-hidden className="h-4 w-px bg-ash-700" />
-
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-mono text-[13px] text-bone-3">
-            {owner}/<span className="font-medium text-bone">{repo}</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-body">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-muted"
+          >
+            <path d="M3.5 2.5h8a1 1 0 0 1 1 1v9.5h-8.5a1 1 0 0 1-1-1z" />
+            <path d="M3.5 11.5a1 1 0 0 1 1-1h8" />
+          </svg>
+          <span>
+            {REPO.owner} / <span className="font-semibold text-ink">{REPO.name}</span>
           </span>
-          <span className="hidden items-center gap-1 font-mono text-[11px] text-bone-4 sm:flex">
-            <GitBranch size={11} />
-            {branch}
+          <span className="inline-flex items-center gap-1 rounded-box border border-line bg-subtle px-[7px] font-mono text-xs leading-5 text-body">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              className="text-muted"
+            >
+              <circle cx="4.5" cy="3.5" r="1.7" />
+              <circle cx="4.5" cy="12.5" r="1.7" />
+              <circle cx="11.5" cy="5" r="1.7" />
+              <path d="M4.5 5.2v5.6M11.5 6.7c0 3-7 2.5-7 4.1" />
+            </svg>
+            {REPO.branch}
           </span>
-        </span>
-
-        <Link
-          to="/connect"
-          className="hidden shrink-0 items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-bone-4 transition-colors hover:text-bone md:flex"
-        >
-          <ChevronsUpDown size={11} />
-          Switch
-        </Link>
-
-        <div className="ml-auto flex items-center gap-3 sm:gap-5">
-          <Chip className="hidden sm:inline-flex">{release}</Chip>
-          <span className="flex items-center gap-2">
-            <Dot tone={live ? "healthy" : "offline"} pulse={live} />
-            <Label className={live ? "text-jade" : "text-bone-4"}>
-              {live ? "Live · 2.5s" : "No reports"}
-            </Label>
-          </span>
-          {user && (
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xs border border-ash-700 bg-ash-850 font-mono text-[10.5px] text-bone-2">
-              {user.slice(0, 2).toUpperCase()}
-            </span>
-          )}
         </div>
+        <Link to="/connect" className="text-sm text-body hover:text-ink">
+          Switch repository
+        </Link>
+        <LiveIndicator live={live} />
       </div>
     </header>
   );

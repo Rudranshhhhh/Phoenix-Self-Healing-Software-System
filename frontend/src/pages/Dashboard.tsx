@@ -1,12 +1,16 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useIncidentList } from "../hooks/useIncidentList";
+import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { useSession } from "../state/SessionContext";
 import { findRepository } from "../mock/repos";
 import { AppHeader } from "../components/chrome/AppHeader";
 import { GithubMark } from "../components/brand/Wordmark";
-import { IncidentList } from "../components/dashboard/IncidentPanel";
-import { Label, SectionRule } from "../components/ui/Primitives";
+import { IncidentRows } from "../components/incidents/IncidentRows";
+import { SHOW_REJECTED } from "../lib/flags";
+import { LiveHero } from "../components/incidents/LiveHero";
+import { isActive } from "../lib/incident";
+
+const HERO_FRESH_MS = 10 * 60 * 1000;
 
 export default function Dashboard() {
   const params = useParams();
@@ -29,6 +33,22 @@ export default function Dashboard() {
   }, [params.owner, params.repo, sessionRepo]);
 
   const isDemo = !sessionRepo && !params.owner;
+  const { incidents, loading, error } = incidentList;
+  const visible = useMemo(
+    () => (SHOW_REJECTED ? incidents : incidents.filter((i) => i.status !== "rejected")),
+    [incidents],
+  );
+  // The hero follows the most recently updated incident Phoenix is still working on,
+  // if it changed in the last 10 minutes; otherwise the most recent incident overall.
+  // Stops a stale "Detected 3h ago" incident from looking live.
+  const hero = useMemo(() => {
+    const now = Date.now();
+    const live = visible.find(
+      (i) => isActive(i.status) && now - new Date(i.updated_at).getTime() < HERO_FRESH_MS,
+    );
+    return live ?? visible[0] ?? null;
+  }, [visible]);
+  const heroDetail = useIncident(hero?.id ?? null).incident;
 
   return (
     <div className="min-h-screen">
@@ -37,31 +57,47 @@ export default function Dashboard() {
         repo={repo.name}
         branch={repo.defaultBranch}
         release="9c41ab7"
-        live
+        live={!incidentList.loading && incidentList.error === null}
         user={user?.login}
       />
 
-      <main className="mx-auto max-w-[1420px] space-y-8 px-4 py-7 sm:px-6 sm:py-9">
+      <main className="mx-auto max-w-[1200px] px-4 pb-12 pt-7 sm:px-6">
         {isDemo && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-ash-800 bg-ash-925 px-4 py-3">
-            <Label className="text-sodium/80">Demo workspace</Label>
+          <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-box border border-line bg-surface px-4 py-3 text-[13px]">
+            <span className="text-muted">Demo workspace</span>
             <Link
               to="/connect"
-              className="ml-auto inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-sodium hover:underline"
+              className="ml-auto inline-flex items-center gap-1.5 font-medium text-ink underline-offset-2 hover:underline"
             >
               <GithubMark size={12} />
-              Connect
+              Connect a repository
             </Link>
           </div>
         )}
 
-        {/* -- incidents ------------------------------------------------ */}
-        <section>
-          <div className="mb-4 flex flex-wrap items-center gap-4">
-            <SectionRule className="flex-1">Incidents</SectionRule>
+        <h1 className="text-[24px] font-semibold leading-tight text-ink">Incidents</h1>
+        <p className="mb-4 mt-1 text-[14px] text-muted">
+          Failures on {repo.defaultBranch} that Phoenix is handling.
+        </p>
+
+        {loading ? (
+          <p className="text-[14px] text-muted">Loading incidents…</p>
+        ) : error && incidents.length === 0 ? (
+          <div className="rounded-box border border-line bg-surface px-6 py-12 text-center">
+            <p className="text-[15px] text-body">Can't reach the Phoenix API. Is phoenix-api running on port 8000?</p>
+            <p className="mt-2 font-mono text-[12px] text-muted">{error.message}</p>
           </div>
-          <IncidentList {...incidentList} />
-        </section>
+        ) : (
+          <>
+            <LiveHero
+              summary={hero}
+              incident={heroDetail && hero && heroDetail.id === hero.id ? heroDetail : null}
+              branch={repo.defaultBranch}
+            />
+            {error && <p className="mb-3 text-[13px] text-muted">Connection lost, retrying…</p>}
+            {visible.length > 0 && <IncidentRows incidents={visible} />}
+          </>
+        )}
       </main>
     </div>
   );

@@ -19,7 +19,7 @@ export function Mark({ size = 22, className = "" }: { size?: number; className?:
       <path d="M6.5 9h11" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.7" strokeLinecap="round" />
       <path
         d="M6.5 15.5h11M12 10v11"
-        stroke="var(--color-sodium)"
+        stroke="currentColor"
         strokeWidth="1.7"
         strokeLinecap="round"
         strokeDasharray="0 0"
@@ -36,14 +36,8 @@ export function Mark({ size = 22, className = "" }: { size?: number; className?:
 
 export function Wordmark({ style }: { style?: CSSProperties }) {
   return (
-    <span className="inline-flex items-center gap-2.5 text-bone" style={style}>
-      <Mark />
-      <span
-        className="font-display text-[19px] font-semibold tracking-[-0.02em]"
-        style={{ fontVariationSettings: '"wdth" 88' }}
-      >
-        Phoenix
-      </span>
+    <span className="font-dot font-extrabold text-[26px] leading-none tracking-[0.02em] text-ink" style={style}>
+      Phoenix
     </span>
   );
 }

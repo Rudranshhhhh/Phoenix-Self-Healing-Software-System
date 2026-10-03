@@ -5,7 +5,10 @@ import { SiteFooter, SiteHeader } from "./components/chrome/Site";
 import Home from "./pages/Home";
 import Connect from "./pages/Connect";
 import Dashboard from "./pages/Dashboard";
+import IncidentPage from "./pages/IncidentPage";
 import NotFound from "./pages/NotFound";
+import ChickPreview from "./pages/ChickPreview";
+import ArcPreview from "./pages/ArcPreview";
 
 /** Land at the top of each new page, except when following an in-page anchor. */
 function ScrollToTop() {
@@ -44,7 +47,11 @@ export default function App() {
 
           {/* The monitoring view carries its own, quieter chrome. */}
           <Route path="/app" element={<Dashboard />} />
+          <Route path="/app/incidents/:id" element={<IncidentPage />} />
           <Route path="/app/:owner/:repo" element={<Dashboard />} />
+
+          {import.meta.env.DEV && <Route path="/dev/chick" element={<ChickPreview />} />}
+          {import.meta.env.DEV && <Route path="/dev/arc" element={<ArcPreview />} />}
         </Routes>
       </SessionProvider>
     </BrowserRouter>
