@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ServiceProcess } from "../types/phoenix";
 import { useEngine } from "../hooks/useEngine";
+import { useIncidentList } from "../hooks/useIncidentList";
 import { engine } from "../mock/engine";
 import { useSession } from "../state/SessionContext";
 import { findRepository } from "../mock/repos";
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const params = useParams();
   const { user, repo: sessionRepo } = useSession();
   const { services, incidents, feed, activeFaults } = useEngine();
+  const incidentList = useIncidentList();
 
   const [selectedId, setSelectedId] = useState("web");
   const [seriesKey, setSeriesKey] = useState<(typeof SERIES)[number]["key"]>("cpu");
@@ -208,7 +210,7 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <IncidentList incidents={incidents} repo={`${repo.owner}/${repo.name}`} />
+          <IncidentList {...incidentList} />
         </section>
 
         {/* -- demo controls -------------------------------------------- */}
