@@ -8,8 +8,6 @@
 
 export type Severity = "low" | "medium" | "high" | "critical";
 
-export type ServiceStatus = "healthy" | "degraded" | "failing" | "offline";
-
 /** Where an incident is in the repair pipeline. */
 export type RepairStage =
   | "open" // captured, nothing attempted
@@ -50,33 +48,6 @@ export interface Repository {
   defaultBranch: string;
   description: string;
   scan: SdkScan;
-}
-
-// ---------------------------------------------------------------------------
-// Telemetry
-// ---------------------------------------------------------------------------
-
-/** One 1.5s sample reported by the SDK for one process. */
-export interface Sample {
-  t: number; // epoch ms
-  cpu: number; // percent of one core
-  memory: number; // percent of the process limit
-  memoryMb: number;
-  rpm: number; // requests per minute
-  p95: number; // ms
-  errorRate: number; // percent of requests
-}
-
-export interface ServiceProcess {
-  id: string;
-  name: string;
-  role: "web" | "worker" | "scheduler";
-  runtime: string;
-  status: ServiceStatus;
-  pid: number;
-  uptimeSeconds: number;
-  memoryLimitMb: number;
-  history: Sample[];
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +104,4 @@ export interface Incident {
   /** Why the agent stopped, when the stage is `unfixable`. */
   note?: string;
   fix?: ProposedFix;
-}
-
-export interface FeedEntry {
-  id: string;
-  t: number;
-  kind: "info" | "warn" | "error" | "repair";
-  source: string;
-  text: string;
 }
