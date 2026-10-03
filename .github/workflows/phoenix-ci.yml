@@ -1,0 +1,207 @@
+name: Phoenix CI
+
+on:
+  push:
+    branches:
+      - main
+      - dashwanth15
+      - 'phoenix/**'
+  pull_request:
+    branches:
+      - main
+      - dashwanth15
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Phoenix Validation Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Python
+        id: setup_python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 3. Install Dependencies
+        id: install_deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          else
+            pip install pytest flake8 requests
+          fi
+
+      - name: 4. Run Lint & Static Checks
+        id: lint
+        run: |
+          mkdir -p ci-reports
+          echo "Running flake8 static analysis on sample-app..."
+          flake8 sample-app --config=.flake8 --tee --output-file=ci-reports/flake8-report.txt
+
+      - name: 5. Run Automated Tests (Pytest)
+        id: pytest
+        run: |
+          mkdir -p ci-reports
+          echo "Running pytest automated test suite..."
+          pytest --junitxml=ci-reports/pytest-results.xml --tb=short -v 2>&1 | tee ci-reports/pytest-output.log
+
+      - name: 6. Build Docker Image
+        id: docker_build
+        run: |
+          mkdir -p ci-reports
+          echo "Building Docker container for sample-app..."
+          docker build -t phoenix-sample-app:ci ./sample-app 2>&1 | tee ci-reports/docker-build.log
+
+      - name: 7. Start Docker Container & Run Integration Health Check
+        id: docker_run_health
+        run: |
+          mkdir -p ci-reports
+          echo "Starting Docker container..."
+          docker run -d --name phoenix-sample-app -p 8080:8080 -e PORT=8080 phoenix-sample-app:ci
+
+          echo "Waiting for container to become healthy..."
+          HEALTHY=false
+          for i in {1..15}; do
+            if curl -s -f http://localhost:8080/health > ci-reports/health-response.json; then
+              echo "✅ Health check passed on attempt $i"
+              cat ci-reports/health-response.json
+              HEALTHY=true
+              break
+            fi
+            echo "Attempt $i/15: waiting for container (sleep 2s)..."
+            sleep 2
+          done
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "❌ Health check timed out or failed!"
+            docker logs phoenix-sample-app > ci-reports/container-failure.log 2>&1 || true
+            exit 1
+          fi
+
+      - name: 8. Capture Container Logs & Teardown
+        if: always()
+        run: |
+          mkdir -p ci-reports
+          if docker ps -a --format '{{.Names}}' | grep -q "^phoenix-sample-app$"; then
+            echo "Collecting container runtime logs..."
+            docker logs phoenix-sample-app > ci-reports/container.log 2>&1 || true
+            docker stop phoenix-sample-app || true
+            docker rm -f phoenix-sample-app || true
+          fi
+
+      - name: 9. Generate Phoenix CI Report & Summary
+        id: report
+        if: always()
+        run: |
+          mkdir -p ci-reports
+
+          STATUS="success"
+          FAILED_STEP="none"
+          EXIT_CODE=0
+          ERROR_SUMMARY="All checks passed successfully."
+
+          if [ "${{ steps.checkout.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="checkout"; EXIT_CODE=1; ERROR_SUMMARY="Checkout failed"
+          elif [ "${{ steps.setup_python.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="setup_python"; EXIT_CODE=1; ERROR_SUMMARY="Python setup failed"
+          elif [ "${{ steps.install_deps.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="install_deps"; EXIT_CODE=1; ERROR_SUMMARY="Dependency installation failed"
+          elif [ "${{ steps.lint.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="lint"; EXIT_CODE=1; ERROR_SUMMARY="Lint / static checks failed"
+          elif [ "${{ steps.pytest.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="pytest"; EXIT_CODE=1; ERROR_SUMMARY="Pytest execution failed"
+          elif [ "${{ steps.docker_build.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="docker_build"; EXIT_CODE=1; ERROR_SUMMARY="Docker build failed"
+          elif [ "${{ steps.docker_run_health.outcome }}" != "success" ]; then
+            STATUS="failed"; FAILED_STEP="docker_run_health"; EXIT_CODE=1; ERROR_SUMMARY="Docker health / integration check failed"
+          fi
+
+          TEST_RESULTS="N/A"
+          if [ -f ci-reports/pytest-output.log ]; then
+            TEST_RESULTS=$(tail -n 5 ci-reports/pytest-output.log | tr '\n' ' ' | sed 's/"/\\"/g')
+          fi
+
+          cat <<EOF > ci-reports/phoenix-ci-report.json
+          {
+            "status": "$STATUS",
+            "commit_sha": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "workflow": "${{ github.workflow }}",
+            "run_id": ${{ github.run_id }},
+            "run_number": ${{ github.run_number }},
+            "event_name": "${{ github.event_name }}",
+            "repository": "${{ github.repository }}",
+            "actor": "${{ github.actor }}",
+            "failed_step": "$FAILED_STEP",
+            "exit_code": $EXIT_CODE,
+            "error_summary": "$ERROR_SUMMARY",
+            "test_results": "$TEST_RESULTS",
+            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          }
+          EOF
+
+          echo "Generated Phoenix CI Report:"
+          cat ci-reports/phoenix-ci-report.json
+
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## 🔥 Phoenix CI Validation Report
+
+          | Metric | Value |
+          | :--- | :--- |
+          | **Status** | $( [ "$STATUS" = "success" ] && echo "✅ **PASSED**" || echo "❌ **FAILED**" ) |
+          | **Workflow** | \`${{ github.workflow }}\` |
+          | **Branch** | \`${{ github.ref_name }}\` |
+          | **Commit** | \`${{ github.sha }}\` |
+          | **Failed Step** | \`$FAILED_STEP\` |
+          | **Exit Code** | \`$EXIT_CODE\` |
+
+          ### 📋 Pipeline Steps
+          * **Checkout**: ${{ steps.checkout.outcome }}
+          * **Python Setup**: ${{ steps.setup_python.outcome }}
+          * **Install Dependencies**: ${{ steps.install_deps.outcome }}
+          * **Lint (flake8)**: ${{ steps.lint.outcome }}
+          * **Tests (pytest)**: ${{ steps.pytest.outcome }}
+          * **Docker Build**: ${{ steps.docker_build.outcome }}
+          * **Docker Run & Health Check**: ${{ steps.docker_run_health.outcome }}
+
+          ### 🧪 Summary
+          > $ERROR_SUMMARY
+          EOF
+
+      - name: 10. Upload Phoenix CI Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-ci-report-${{ github.sha }}
+          path: ci-reports/
+          retention-days: 14
+
+      - name: 11. Final Pipeline Assertion
+        if: always()
+        run: |
+          if [ "${{ steps.checkout.outcome }}" != "success" ] || \
+             [ "${{ steps.setup_python.outcome }}" != "success" ] || \
+             [ "${{ steps.install_deps.outcome }}" != "success" ] || \
+             [ "${{ steps.lint.outcome }}" != "success" ] || \
+             [ "${{ steps.pytest.outcome }}" != "success" ] || \
+             [ "${{ steps.docker_build.outcome }}" != "success" ] || \
+             [ "${{ steps.docker_run_health.outcome }}" != "success" ]; then
+            echo "❌ One or more required pipeline stages failed. Failing CI workflow."
+            exit 1
+          fi
+          echo "🎉 All Phoenix validation stages completed successfully!"

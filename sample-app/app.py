@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-import thread
+import threading
 import logging
 from flask import Flask, jsonify
 

@@ -1,0 +1,5 @@
+# Phoenix Root Dev / CI Dependencies
+-r sample-app/requirements.txt
+pytest>=8.0.0
+flake8>=7.0.0
+requests>=2.31.0
