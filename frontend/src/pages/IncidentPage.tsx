@@ -10,9 +10,11 @@ import { SectionBox } from "../components/incidents/SectionBox";
 import { StatusBadge } from "../components/incidents/StatusBadge";
 import { TracebackBox } from "../components/incidents/TracebackBox";
 import { PatchBox, PendingLine, PullRequestBox, RootCauseBox, ValidationBox } from "../components/incidents/DetailSections";
+import { IncidentSidebar } from "../components/incidents/IncidentSidebar";
 import { SHOW_REJECTED } from "../lib/flags";
 import { since } from "../lib/format";
 import { blamedFrame, isActive, stageClock, stageStartMs } from "../lib/incident";
+import { REPO } from "../lib/repo";
 
 function SourceMeta({ incident, branch }: { incident: Incident; branch: string }) {
   const { source } = incident;
@@ -51,7 +53,17 @@ function SourceMeta({ incident, branch }: { incident: Incident; branch: string }
   );
 }
 
-function IncidentBody({ incident, branch, now }: { incident: Incident; branch: string; now: number }) {
+function IncidentBody({
+  incident,
+  branch,
+  repoName,
+  now,
+}: {
+  incident: Incident;
+  branch: string;
+  repoName: string;
+  now: number;
+}) {
   const blame = blamedFrame(incident.error);
   const clock = isActive(incident.status)
     ? stageClock(now - stageStartMs(incident.status, incident.timeline, incident.updated_at))
@@ -71,29 +83,32 @@ function IncidentBody({ incident, branch, now }: { incident: Incident; branch: s
         <SourceMeta incident={incident} branch={branch} />
       </div>
 
-      <PipelineArc status={incident.status} incidentId={incident.id} detail={clock} />
+      <PipelineArc status={incident.status} incidentId={incident.id} detail={clock} repo={{ name: repoName, branch }} />
 
-      <div className="mt-5 flex flex-col gap-4">
-        <SectionBox
-          title="Error"
-          meta={blame ? `Blamed frame: ${blame.file}, line ${blame.line}` : undefined}
-        >
-          <TracebackBox error={incident.error} />
-        </SectionBox>
-        {incident.diagnosis && <RootCauseBox diagnosis={incident.diagnosis} />}
-        {incident.patch && <PatchBox patch={incident.patch} />}
-        {(incident.validation || incident.status === "validating") && (
-          <ValidationBox validation={incident.validation} />
-        )}
-        {incident.pull_request && (
-          <PullRequestBox
-            pr={incident.pull_request}
-            title={incident.patch?.summary ?? null}
-            openedAt={openedAt}
-            branch={branch}
-          />
-        )}
-        <PendingLine status={incident.status} />
+      <div className="mt-5 flex flex-wrap items-start gap-6">
+        <div className="flex min-w-0 grow-[999] basis-[560px] flex-col gap-4">
+          <SectionBox
+            title="Error"
+            meta={blame ? `Blamed frame: ${blame.file}, line ${blame.line}` : undefined}
+          >
+            <TracebackBox error={incident.error} />
+          </SectionBox>
+          {incident.diagnosis && <RootCauseBox diagnosis={incident.diagnosis} />}
+          {incident.patch && <PatchBox patch={incident.patch} />}
+          {(incident.validation || incident.status === "validating") && (
+            <ValidationBox validation={incident.validation} />
+          )}
+          {incident.pull_request && (
+            <PullRequestBox
+              pr={incident.pull_request}
+              title={incident.patch?.summary ?? null}
+              openedAt={openedAt}
+              branch={branch}
+            />
+          )}
+          <PendingLine status={incident.status} />
+        </div>
+        <IncidentSidebar incident={incident} branch={branch} now={now} />
       </div>
     </>
   );
@@ -105,7 +120,7 @@ export default function IncidentPage() {
   const list = useIncidentList();
   const { incident, error, loading } = useIncident(id || null);
   const repo = useMemo(
-    () => sessionRepo ?? { owner: "phoenix-labs", name: "orbital-checkout", defaultBranch: "main" },
+    () => sessionRepo ?? { owner: REPO.owner, name: REPO.name, defaultBranch: REPO.branch },
     [sessionRepo],
   );
   const now = useNow(incident !== null && isActive(incident.status));
@@ -145,7 +160,7 @@ export default function IncidentPage() {
         ) : (
           <>
             {error && <p className="mb-3 text-[13px] text-muted">Connection lost, retrying…</p>}
-            <IncidentBody incident={incident} branch={repo.defaultBranch} now={now} />
+            <IncidentBody incident={incident} branch={repo.defaultBranch} repoName={repo.name} now={now} />
           </>
         )}
       </main>

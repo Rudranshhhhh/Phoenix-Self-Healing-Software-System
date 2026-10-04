@@ -35,7 +35,7 @@ function ResultIcon({ pass }: { pass: boolean }) {
   );
 }
 
-function Chip({ children }: { children: string }) {
+export function Chip({ children }: { children: string }) {
   return (
     <span className="inline-flex items-center rounded-box border border-line bg-subtle px-[7px] font-mono text-[12px] leading-5 text-body [overflow-wrap:anywhere]">
       {children}
