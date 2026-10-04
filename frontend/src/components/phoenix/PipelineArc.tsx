@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { cn } from "../../lib/cn";
 import { REPO } from "../../lib/repo";
+import { isActing } from "../../lib/incident";
 import { PhoenixChick, type ChickMood } from "./PhoenixChick";
 
 export const ARC_STAGES = [
@@ -33,12 +34,15 @@ type Props = {
   detail?: string;
   variant?: "soft" | "flat";
   className?: string;
+  /** corner label; defaults to the demo repo in lib/repo.ts */
+  repo?: { name: string; branch: string };
 };
 
-export function PipelineArc({ status, incidentId, detail, variant = "soft", className }: Props) {
+export function PipelineArc({ status, incidentId, detail, variant = "soft", className, repo = REPO }: Props) {
   const empty = status === null;
   const { index, rejected } = empty ? { index: 0, rejected: false } : arcPosition(status);
   const parity = index % 2 === 0 ? "a" : "b";
+  const acting = status !== null && isActing(status);
 
   const ticks = useMemo(() => {
     const out: { k: number; op: number; done: boolean }[] = [];
@@ -80,7 +84,7 @@ export function PipelineArc({ status, incidentId, detail, variant = "soft", clas
       {["x1", "x2", "x3", "x4"].map((x) => (
         <span key={x} aria-hidden="true" className={`phx-arc-cross ${x}`} />
       ))}
-      <span aria-hidden="true" className="phx-arc-coord c1">{REPO.name} / {REPO.branch}</span>
+      <span aria-hidden="true" className="phx-arc-coord c1">{repo.name} / {repo.branch}</span>
       <span aria-hidden="true" className="phx-arc-coord c2">
         {empty ? "idle" : rejected ? "stopped" : `stage ${index + 1} / 6`}
       </span>
@@ -104,7 +108,7 @@ export function PipelineArc({ status, incidentId, detail, variant = "soft", clas
             </div>
           ))}
           {!empty && ARC_STAGES.map((s, i) => {
-            const state = i < index ? "is-past" : i === index ? (rejected ? "is-rejected" : "is-current") : "is-future";
+            const state = i < index ? "is-past" : i === index ? (rejected ? "is-rejected" : acting ? "is-current" : "is-current is-idle") : "is-future";
             const op = rejected && i > index ? 0 : OPACITY[Math.abs(i - index)];
             return (
               <div key={s.status} className={cn("phx-arc-spoke", state)} style={{ opacity: op, transform: spin(i) }}>

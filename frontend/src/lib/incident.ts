@@ -6,6 +6,11 @@ export function isActive(status: IncidentStatus): boolean {
   return status !== "rejected" && status !== "pr_opened";
 }
 
+/** Phoenix is doing work right now. The only statuses that get Ember. */
+export function isActing(status: IncidentStatus): boolean {
+  return status === "diagnosing" || status === "fix_proposed" || status === "validating";
+}
+
 export function blamedFrame(error: IncidentError): StackFrame | null {
   return error.frames.find((f) => f.blame) ?? null;
 }

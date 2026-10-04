@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import type { Incident, IncidentStatus, PullRequest } from "../../types/incident";
 import { duration } from "../../lib/format";
 import { statusLabel } from "../../lib/status";
-import { blamedFrame, isActive } from "../../lib/incident";
+import { blamedFrame, isActing, isActive } from "../../lib/incident";
 import { Chip } from "./DetailSections";
 
 const DOTS = 12;
 
-type Tone = "done" | "now" | "fail";
+type Tone = "done" | "now" | "wait" | "fail";
 
 interface StageRow {
   status: IncidentStatus;
@@ -31,13 +31,13 @@ function stageRows(incident: Incident, now: number): StageRow[] {
         tone: next.status === "rejected" ? "fail" : "done",
       });
     } else {
-      rows.push({ status: entry.status, secs: Math.max(0, (now - start) / 1000), tone: "now" });
+      rows.push({ status: entry.status, secs: Math.max(0, (now - start) / 1000), tone: isActing(entry.status) ? "now" : "wait" });
     }
   }
   return rows;
 }
 
-const DOT_ON: Record<Tone, string> = { done: "bg-body", now: "bg-ember", fail: "bg-fail" };
+const DOT_ON: Record<Tone, string> = { done: "bg-body", now: "bg-ember", wait: "bg-body", fail: "bg-fail" };
 
 /** Dots are relative to the longest stage of this incident (at least one dot). */
 function DotBar({ secs, max, tone }: { secs: number; max: number; tone: Tone }) {
@@ -79,7 +79,7 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
   const rows = stageRows(incident, now);
   const max = Math.max(60, ...rows.map((r) => r.secs));
   const total = rows.reduce((sum, r) => sum + r.secs, 0);
-  const { source, diagnosis, pull_request: pr, validation } = incident;
+  const { source, diagnosis, pull_request: pr } = incident;
   const blame = blamedFrame(incident.error);
   const file = diagnosis?.suspect_file ?? blame?.file ?? null;
   const line = diagnosis?.suspect_line ?? blame?.line ?? null;
@@ -95,7 +95,7 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
               <DotBar secs={r.secs} max={max} tone={r.tone} />
               <span className="whitespace-nowrap font-mono tabular-nums text-muted">
                 {duration(r.secs)}
-                {r.tone === "now" ? " so far" : ""}
+                {r.tone === "now" || r.tone === "wait" ? " so far" : ""}
               </span>
             </li>
           ))}
@@ -166,17 +166,6 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
           <Sub>Created with the pull request.</Sub>
         )}
       </Part>
-
-      {(validation || incident.status === "validating") && (
-        <Part title="Sandbox">
-          <p>Docker</p>
-          <Sub>
-            {validation
-              ? `${validation.tests_run} tests in ${duration(validation.duration_seconds)}`
-              : "Running the tests now."}
-          </Sub>
-        </Part>
-      )}
     </aside>
   );
 }

@@ -361,6 +361,7 @@ p {
 .is-past .phx-arc-dot { background: #1F2328; }
 .is-future .phx-arc-dot { background: #fff; border: 2px solid #57606A; }
 .is-current .phx-arc-dot { width: 22px; height: 22px; background: #FF4F12; outline: 2px solid #FF4F12; outline-offset: 4px; }
+.is-current.is-idle .phx-arc-dot { background: #1F2328; outline-color: #1F2328; }
 .is-rejected .phx-arc-dot { width: 24px; height: 24px; background: #fff; border: 2.5px solid #CF222E; }
 .is-rejected .phx-arc-dot::before, .is-rejected .phx-arc-dot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 2.5px; border-radius: 1px; background: #CF222E; }
 .is-rejected .phx-arc-dot::before { transform: translate(-50%, -50%) rotate(45deg); }

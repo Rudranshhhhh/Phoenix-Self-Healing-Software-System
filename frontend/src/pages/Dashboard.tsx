@@ -9,6 +9,7 @@ import { IncidentRows } from "../components/incidents/IncidentRows";
 import { SHOW_REJECTED } from "../lib/flags";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { isActive } from "../lib/incident";
+import { REPO } from "../lib/repo";
 
 const HERO_FRESH_MS = 10 * 60 * 1000;
 
@@ -29,7 +30,7 @@ export default function Dashboard() {
         }
       );
     }
-    return sessionRepo ?? { owner: "phoenix-labs", name: "orbital-checkout", defaultBranch: "main" };
+    return sessionRepo ?? { owner: REPO.owner, name: REPO.name, defaultBranch: REPO.branch };
   }, [params.owner, params.repo, sessionRepo]);
 
   const isDemo = !sessionRepo && !params.owner;
@@ -93,6 +94,7 @@ export default function Dashboard() {
               summary={hero}
               incident={heroDetail && hero && heroDetail.id === hero.id ? heroDetail : null}
               branch={repo.defaultBranch}
+              repoName={repo.name}
             />
             {error && <p className="mb-3 text-[13px] text-muted">Connection lost, retrying…</p>}
             {visible.length > 0 && <IncidentRows incidents={visible} />}
