@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Stand-in for GET /api/github/user and /api/github/repos.
-// The scan field is what the Phoenix service reports after reading each repo's
-// requirements.txt / pyproject.toml / Pipfile looking for phoenix-sdk.
+// The scan field is what Phoenix reports after looking in each repo's
+// .github/workflows folder for a CI run that tests Python code.
 // ---------------------------------------------------------------------------
 
 import type { GithubUser, Repository, SdkScan } from "../types/phoenix";
@@ -75,7 +75,7 @@ const SEEDS: RepoSeed[] = [
     language: "TypeScript",
     pushedAt: hoursAgo(11),
     defaultBranch: "main",
-    description: "Next.js storefront. No Python entrypoint for the SDK to wrap.",
+    description: "Next.js storefront. No Python code for Phoenix to test.",
     result: { state: "missing", checked: ["package.json"] },
   },
   {
