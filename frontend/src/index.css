@@ -168,9 +168,11 @@ body {
   }
 }
 
-p {
-  margin: 0;
-  text-wrap: pretty;
+@layer base {
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
 }
 
 ::selection {
