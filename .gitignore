@@ -235,3 +235,6 @@ __marimo__/
 
 # phoenix-api ingested incidents (local JSON store)
 phoenix-api/data/
+
+# Phoenix runtime output (saved failures, per-incident sandbox workspaces)
+.phoenix/

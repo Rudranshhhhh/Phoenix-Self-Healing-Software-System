@@ -1,19 +1,5 @@
-"""
-Phoenix API — Main Application
+"""Phoenix API: serves ingested pipeline incidents (plus demo fixtures) to the dashboard."""
 
-<<<<<<< HEAD
-FastAPI application for the Phoenix orchestrator.
-Real incident management, not mocked fixtures.
-"""
-import logging
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from .database import init_database, close_database
-from .routers import health, incidents
-=======
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -25,61 +11,21 @@ from pydantic import BaseModel, ValidationError
 from app.fixtures import SERVER_STARTED, STATIC_INCIDENTS, live_incident
 from app.ingest import IngestEvent, demo_fixtures_enabled, store
 from app.models import Incident, IncidentListResponse, IncidentSummary
->>>>>>> 3d43c71b05cbb182882b3e3e5316c76f2d9bd2bb
 
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Phoenix API", version="0.1.0")
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager: startup and shutdown."""
-    # Startup
-    logger.info("🔥 Phoenix API starting up")
-    if not init_database():
-        logger.error("Failed to initialize database — aborting")
-        raise RuntimeError("Database initialization failed")
-    logger.info("✓ Phoenix API ready")
-    yield
-    # Shutdown
-    logger.info("🔥 Phoenix API shutting down")
-    close_database()
-
-
-app = FastAPI(
-    title="Phoenix Orchestrator API",
-    description="AI-powered self-healing software system",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-<<<<<<< HEAD
-    allow_origins=["*"],  # In production, be more specific
-    allow_credentials=True,
-=======
     allow_origins=[o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
->>>>>>> 3d43c71b05cbb182882b3e3e5316c76f2d9bd2bb
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(health.router)
-app.include_router(incidents.router)
+
+class HealthResponse(BaseModel):
+    status: str
 
 
-<<<<<<< HEAD
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {
-        "name": "Phoenix Orchestrator API",
-        "version": "1.0.0",
-        "status": "running",
-    }
-=======
 class ErrorResponse(BaseModel):
     detail: str
 
@@ -164,4 +110,3 @@ def ingest_event(event: IngestEvent, x_phoenix_token: Optional[str] = Header(def
         return store.apply(event)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
->>>>>>> 3d43c71b05cbb182882b3e3e5316c76f2d9bd2bb
