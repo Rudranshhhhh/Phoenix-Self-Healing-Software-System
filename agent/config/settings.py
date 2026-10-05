@@ -87,6 +87,38 @@ class Settings(BaseSettings):
     restart_count_delta_threshold: int = 3
     log_tail_lines: int = 50
 
+    # ------------------------------------------------------------------ #
+    # Sandbox / Validation / Git (Person 4)                               #
+    # ------------------------------------------------------------------ #
+
+    # Base directory for temporary sandbox copies.
+    # Empty string = OS default temp dir / phoenix/
+    sandbox_base_dir: str = ""
+
+    # Docker validation timeouts (seconds)
+    sandbox_docker_timeout: int = 180
+    sandbox_container_startup_timeout: int = 30
+
+    # Lint / test step timeouts (seconds)
+    sandbox_lint_timeout: int = 60
+    sandbox_test_timeout: int = 120
+
+    # Feature flags — set to False to skip steps (e.g. in lightweight CI)
+    sandbox_run_lint: bool = True
+    sandbox_run_tests: bool = True
+    sandbox_run_docker: bool = True
+    sandbox_skip_docker_if_unavailable: bool = True
+
+    # Git / GitHub
+    # The full GitHub repository name: "owner/repo"
+    github_repo: str = ""
+    # The target branch for PRs (default: main)
+    github_base_branch: str = "main"
+    # GitHub Personal Access Token — required for branch push + PR creation
+    github_token: str = ""
+    # Git username for HTTPS push (optional — PAT alone is sufficient for GitHub)
+    git_username: str = ""
+
 
 # Singleton — import and use directly
 settings = Settings()

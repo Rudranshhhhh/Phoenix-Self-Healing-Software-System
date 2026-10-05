@@ -10,9 +10,10 @@ Startup sequence:
   2. Initialise EventBus
   3. Register collector plugins
   4. Build all engines (detection, diagnosis, recovery, verification, escalation)
-  5. Build reporters and connect WebSocket
-  6. Start CollectorScheduler (spawns daemon threads)
-  7. Block main thread forever (all work is in daemon threads)
+  5. Build Code Patch Engine (LLM → Sandbox → Git → PR) [Person 4]
+  6. Build reporters and connect WebSocket
+  7. Start CollectorScheduler (spawns daemon threads)
+  8. Block main thread forever (all work is in daemon threads)
 """
 from __future__ import annotations
 
@@ -51,6 +52,7 @@ from agent.recovery.strategies.wait_and_retry import WaitAndRetryStrategy
 from agent.reporters.http_reporter import HTTPReporter
 from agent.reporters.reporter_service import ReporterService
 from agent.reporters.websocket_reporter import WebSocketReporter
+from agent.sandbox.code_patch_engine import CodePatchEngine
 from agent.scheduler.collector_scheduler import CollectorScheduler
 from agent.verification.verification_engine import VerificationEngine
 
@@ -82,6 +84,10 @@ def bootstrap() -> CollectorScheduler:
     logger.info("Backend: %s", settings.backend_url)
     logger.info("Grok AI: %s", "enabled" if settings.grok_enabled else "disabled")
     logger.info("Escalation threshold: %d retries", settings.escalation_threshold)
+    logger.info(
+        "Code Patch Engine: %s",
+        "enabled" if settings.github_token else "disabled (set GROQ_API_KEY + GITHUB_TOKEN)",
+    )
 
     # ------------------------------------------------------------------ #
     # 1. Event Bus                                                         #
@@ -232,7 +238,15 @@ def bootstrap() -> CollectorScheduler:
     EscalationEngine(bus=bus)
 
     # ------------------------------------------------------------------ #
-    # 9. Reporters                                                         #
+    # 9. Code Patch Engine — LLM diagnosis → Sandbox → Git → PR           #
+    # (Person 4 module)                                                    #
+    # Subscribes to INCIDENT_DIAGNOSED. Runs in background daemon threads.#
+    # Disabled automatically when GROQ_API_KEY is not set.                #
+    # ------------------------------------------------------------------ #
+    CodePatchEngine(bus=bus)
+
+    # ------------------------------------------------------------------ #
+    # 10. Reporters                                                        #
     # ------------------------------------------------------------------ #
     http_reporter = HTTPReporter(backend_url=settings.backend_url)
     ws_reporter = WebSocketReporter(backend_url=settings.backend_url)
@@ -240,7 +254,7 @@ def bootstrap() -> CollectorScheduler:
     ReporterService(bus=bus, http_reporter=http_reporter, ws_reporter=ws_reporter)
 
     # ------------------------------------------------------------------ #
-    # 10. Scheduler — starts all collector threads                         #
+    # 11. Scheduler — starts all collector threads                        #
     # ------------------------------------------------------------------ #
     intervals = {
         "docker": settings.poll_docker_seconds,

@@ -44,6 +44,32 @@ ESCALATION_TRIGGERED = "EscalationTriggered"
 INCIDENT_RESOLVED = "IncidentResolved"
 
 # ------------------------------------------------------------------ #
+# Sandbox / Validation / Git Events (Person 4)                       #
+# Published by SandboxPipeline                                        #
+# ------------------------------------------------------------------ #
+
+# Pipeline began (sandbox copy being created)
+SANDBOX_STARTED = "SandboxStarted"
+
+# Patch was applied to the sandbox copy; validation is running
+SANDBOX_PATCH_APPLIED = "SandboxPatchApplied"
+
+# All validation checks passed; Git branch/commit/PR steps are next
+SANDBOX_VALIDATED = "SandboxValidated"
+
+# One or more validation checks failed; no branch or PR was created
+SANDBOX_REJECTED = "SandboxRejected"
+
+# The fix branch was created and pushed to the remote
+SANDBOX_BRANCH_PUSHED = "SandboxBranchPushed"
+
+# A Pull Request was successfully opened on GitHub
+SANDBOX_PR_CREATED = "SandboxPRCreated"
+
+# The pipeline itself encountered an unhandled exception
+SANDBOX_FAILED = "SandboxFailed"
+
+# ------------------------------------------------------------------ #
 # Container State Events                                              #
 # ------------------------------------------------------------------ #
 CONTAINER_STOPPED = "ContainerStopped"
