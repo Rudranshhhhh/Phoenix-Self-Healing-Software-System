@@ -20,7 +20,7 @@ export function MiniPipeline({ status, className }: { status: IncidentStatus; cl
                 ? rejected
                   ? "bg-fail"
                   : "bg-ember"
-                : "border-[1.5px] border-[#B7B0AA]",
+                : "border-[1.5px] border-line-strong",
           )}
         />
       ))}

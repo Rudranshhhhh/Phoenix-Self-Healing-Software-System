@@ -15,7 +15,7 @@ const HERO_FRESH_MS = 10 * 60 * 1000;
 
 export default function Dashboard() {
   const params = useParams();
-  const { user, repo: sessionRepo } = useSession();
+  const { repo: sessionRepo } = useSession();
   const incidentList = useIncidentList();
 
   // A repository from the URL wins, then the one picked on the connect screen,
@@ -57,9 +57,7 @@ export default function Dashboard() {
         owner={repo.owner}
         repo={repo.name}
         branch={repo.defaultBranch}
-        release="9c41ab7"
         live={!incidentList.loading && incidentList.error === null}
-        user={user?.login}
       />
 
       <main className="mx-auto max-w-[1200px] px-4 pb-12 pt-7 sm:px-6">

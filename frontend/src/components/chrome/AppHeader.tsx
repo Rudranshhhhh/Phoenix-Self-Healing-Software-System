@@ -23,9 +23,7 @@ export function AppHeader({
   owner: string;
   repo: string;
   branch: string;
-  release: string;
   live: boolean;
-  user?: string;
 }) {
   return (
     <header className="border-b border-line">

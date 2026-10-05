@@ -32,9 +32,9 @@ export function SiteHeader() {
 
         <nav className="hidden items-center gap-6 md:flex">
           {NAV.map((item) => (
-            <a key={item.to} href={item.to} className="text-[14px] text-muted transition-colors hover:text-ink">
+            <Link key={item.to} to={item.to} className="text-[14px] text-muted transition-colors hover:text-ink">
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -87,7 +87,7 @@ export function SiteFooter() {
 
         <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-4 text-[12px] text-muted">
           <span>Phoenix · self-healing software system</span>
-          <span className="sm:ml-auto">The incidents on this build are simulated.</span>
+          <span className="sm:ml-auto">Demo repo: phoenix-demo/orders-api. Real pipeline runs appear next to the demo incidents.</span>
         </div>
       </div>
     </footer>
@@ -101,9 +101,9 @@ function FooterColumn({ title, links }: { title: string; links: Array<{ label: s
       <ul className="mt-3 list-none space-y-2 p-0">
         {links.map((l) => (
           <li key={l.label}>
-            <a href={l.href} className="text-[14px] text-body no-underline transition-colors hover:text-ink">
+            <Link to={l.href} className="text-[14px] text-body no-underline transition-colors hover:text-ink">
               {l.label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

@@ -98,7 +98,7 @@ export function LiveHero({
         </span>
         <Link
           to={`/app/incidents/${summary.id}`}
-          className="inline-flex min-h-[44px] items-center rounded-box border border-ink bg-ink px-3 text-[13px] font-medium text-[#fff] no-underline hover:bg-body sm:min-h-8"
+          className="inline-flex min-h-[44px] items-center rounded-box border border-ink bg-ink px-3 text-[13px] font-medium text-white no-underline hover:bg-body sm:min-h-8"
         >
           Open incident
         </Link>

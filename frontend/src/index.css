@@ -11,6 +11,7 @@
   --color-subtle: #ECE8E4;
   --color-code: #FBF9F7;
   --color-line: #D5CEC8;
+  --color-line-strong: #B7B0AA;
   --color-ink: #000000;
   --color-body: #1F2328;
   --color-muted: #57606A;
@@ -19,6 +20,7 @@
   --color-fail: #CF222E;
   --color-add-bg: #E6FFEC;
   --color-del-bg: #FFEBE9;
+  --color-del-line: #FFCECB;
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;

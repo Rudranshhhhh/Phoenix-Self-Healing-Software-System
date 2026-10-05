@@ -11,12 +11,17 @@ import NotFound from "./pages/NotFound";
 import ChickPreview from "./pages/ChickPreview";
 import ArcPreview from "./pages/ArcPreview";
 
-/** Land at the top of each new page, except when following an in-page anchor. */
+/** Land at the top of each new page, or on the target of an in-page anchor. */
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (hash) return;
-    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    if (hash) {
+      requestAnimationFrame(() =>
+        document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+      return;
+    }
+    window.scrollTo(0, 0);
   }, [pathname, hash]);
   return null;
 }

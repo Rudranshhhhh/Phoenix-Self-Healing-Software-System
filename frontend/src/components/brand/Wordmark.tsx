@@ -1,39 +1,5 @@
 import type { CSSProperties } from "react";
 
-/**
- * The Phoenix mark: a minus above a plus. What was removed, what replaced it —
- * the whole product in two strokes, and the only glyph the brand needs.
- */
-export function Mark({ size = 22, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="0.6" y="0.6" width="22.8" height="22.8" rx="4" stroke="currentColor" strokeOpacity="0.28" />
-      <path d="M6.5 9h11" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.7" strokeLinecap="round" />
-      <path
-        d="M6.5 15.5h11M12 10v11"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeDasharray="0 0"
-        clipPath="url(#phx-clip)"
-      />
-      <defs>
-        <clipPath id="phx-clip">
-          <rect x="0" y="11.6" width="24" height="12.4" />
-        </clipPath>
-      </defs>
-    </svg>
-  );
-}
-
 export function Wordmark({ style }: { style?: CSSProperties }) {
   return (
     <span className="font-dot font-extrabold text-[26px] leading-none tracking-[0.02em] text-ink" style={style}>
