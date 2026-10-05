@@ -5,6 +5,9 @@
 pydantic==2.7.4
 pydantic-settings==2.3.4
 
+# LLM Engine — Groq via OpenAI-compatible client
+openai==1.35.14
+
 # Docker
 docker==7.1.0
 
@@ -28,3 +31,7 @@ pymongo==4.7.3
 
 # Utilities
 python-dotenv==1.0.1
+
+# Sandbox / Validation / Git Fix (Person 4)
+gitpython==3.1.43
+PyGithub==2.3.0
