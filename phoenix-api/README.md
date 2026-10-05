@@ -1,6 +1,9 @@
-# phoenix-api (stub)
+# phoenix-api
 
-A FastAPI stub that serves fake incidents so the dashboard can be built against real HTTP.
+Phoenix API — serves incidents to the dashboard. Real incidents arrive from the pipeline through
+`POST /api/ingest/events` and are stored in a JSON file; demo fixtures (`INC-001`…`INC-008`) are
+shown alongside them while `DEMO_FIXTURES=1`.
+
 Models in `app/models.py` mirror `frontend/src/types/incident.ts` field for field.
 
 ```bash
@@ -16,8 +19,9 @@ Endpoints (CORS allows `http://localhost:3000`; interactive docs at http://local
 - `GET /api/health`
 - `GET /api/incidents?status=validated,pr_opened&repo=phoenix-demo/orders-api&page=1&page_size=20`
 - `GET /api/incidents/{id}` (404 `{"detail": "Incident not found"}` if unknown)
+- `POST /api/ingest/events` (see below)
 
-Fixtures: `INC-001`…`INC-007` are one incident per status. `INC-008` is live: it advances one
+Demo fixtures: `INC-001`…`INC-007` are one incident per status. `INC-008` is live: it advances one
 status every 5 seconds (detected → diagnosing → fix_proposed → validating → validated → pr_opened)
 and then starts over. Its clock restarts whenever the server (or `--reload`) restarts.
 
@@ -128,3 +132,14 @@ Environment variables:
 | `PHOENIX_REPO` | `phoenix-demo/orders-api` | Repo for a new incident when its first event has no `repo`. |
 | `PHOENIX_INGEST_TOKEN` | unset | When set, ingest requires a matching `X-Phoenix-Token` header. |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed browser origins. |
+
+## Tests
+
+From `phoenix-api/`, with the venv active:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests -q
+```
+
+The tests use a temporary incidents file and never write to `data/incidents.json`.

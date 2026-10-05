@@ -1,4 +1,4 @@
-"""Phoenix API stub: serves fake incidents so the dashboard can be built against real HTTP."""
+"""Phoenix API: serves ingested pipeline incidents (plus demo fixtures) to the dashboard."""
 
 import os
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ from app.fixtures import SERVER_STARTED, STATIC_INCIDENTS, live_incident
 from app.ingest import IngestEvent, demo_fixtures_enabled, store
 from app.models import Incident, IncidentListResponse, IncidentSummary
 
-app = FastAPI(title="Phoenix API (stub)", version="0.1.0")
+app = FastAPI(title="Phoenix API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
