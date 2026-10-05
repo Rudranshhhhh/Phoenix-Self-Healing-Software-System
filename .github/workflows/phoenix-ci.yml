@@ -205,3 +205,29 @@ jobs:
             exit 1
           fi
           echo "🎉 All Phoenix validation stages completed successfully!"
+
+      - name: 12. Report Failure to Phoenix API
+        if: failure() && !startsWith(github.head_ref || github.ref_name, 'phoenix/fix/')
+        continue-on-error: true
+        run: |
+          LOGS=$(tail -c 2000 ci-reports/pytest-output.log 2>/dev/null || echo "No logs available")
+          
+          curl -s -X POST "${{ secrets.PHOENIX_URL || 'http://localhost:8000' }}/api/incidents" \
+            -H "Content-Type: application/json" \
+            -H "X-Phoenix-Token: ${{ secrets.PHOENIX_WEBHOOK_SECRET || 'local-dev-secret' }}" \
+            -d @- << EOF
+          {
+            "source": "github_ci",
+            "repository": "${{ github.repository }}",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.head_ref || github.ref_name }}",
+            "run_id": "${{ github.run_id }}",
+            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "workflow": "${{ github.workflow }}",
+            "job": "validate",
+            "stage": "test",
+            "logs": "$LOGS"
+          }
+          EOF
+          
+          echo "✓ Failure reported to Phoenix API"
