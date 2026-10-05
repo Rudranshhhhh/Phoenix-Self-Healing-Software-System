@@ -232,3 +232,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# phoenix-api ingested incidents (local JSON store)
+phoenix-api/data/
