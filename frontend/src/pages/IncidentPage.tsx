@@ -116,7 +116,7 @@ function IncidentBody({
 
 export default function IncidentPage() {
   const { id = "" } = useParams();
-  const { user, repo: sessionRepo } = useSession();
+  const { repo: sessionRepo } = useSession();
   const list = useIncidentList();
   const { incident, error, loading } = useIncident(id || null);
   const repo = useMemo(
@@ -132,9 +132,7 @@ export default function IncidentPage() {
         owner={repo.owner}
         repo={repo.name}
         branch={repo.defaultBranch}
-        release="9c41ab7"
         live={!list.loading && list.error === null}
-        user={user?.login}
       />
       <main className="mx-auto max-w-[1200px] px-4 pb-12 pt-7 sm:px-6">
         <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-[14px] text-muted">

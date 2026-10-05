@@ -172,7 +172,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
         </dl>
 
         {!pass && validation.rejection_reason && (
-          <div className="mt-3 rounded-box border border-[#FFCECB] bg-del-bg px-4 py-3 text-[14px] leading-relaxed text-body">
+          <div className="mt-3 rounded-box border border-del-line bg-del-bg px-4 py-3 text-[14px] leading-relaxed text-body">
             <span className="font-semibold text-ink">Why Phoenix rejected this fix.</span>{" "}
             {validation.rejection_reason}
           </div>

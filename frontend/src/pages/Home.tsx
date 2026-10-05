@@ -151,7 +151,7 @@ export default function Home() {
       </section>
 
       {/* ================= how it works ================= */}
-      <section id="how" className="scroll-mt-20 border-t border-line">
+      <section id="how" className="scroll-mt-24 border-t border-line">
         <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 sm:py-24">
           <p className="text-[14px] font-medium text-muted">How it works</p>
           <h2 className="mt-3 max-w-[36rem] text-[clamp(1.85rem,3.6vw,2.6rem)] text-ink">
@@ -183,7 +183,7 @@ export default function Home() {
       </section>
 
       {/* ================= limits ================= */}
-      <section id="limits" className="scroll-mt-20 border-t border-line">
+      <section id="limits" className="scroll-mt-24 border-t border-line">
         <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 sm:py-24">
           <p className="text-[14px] font-medium text-muted">Limits</p>
           <h2 className="mt-3 max-w-[34rem] text-[clamp(1.85rem,3.6vw,2.6rem)] text-ink">

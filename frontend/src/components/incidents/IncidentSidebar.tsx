@@ -45,7 +45,7 @@ function DotBar({ secs, max, tone }: { secs: number; max: number; tone: Tone }) 
   return (
     <span aria-hidden className="flex gap-[3px]">
       {Array.from({ length: DOTS }, (_, i) => (
-        <span key={i} className={`size-[5px] rounded-full ${i < n ? DOT_ON[tone] : "bg-[#D6D0CA]"}`} />
+        <span key={i} className={`size-[5px] rounded-full ${i < n ? DOT_ON[tone] : "bg-line"}`} />
       ))}
     </span>
   );

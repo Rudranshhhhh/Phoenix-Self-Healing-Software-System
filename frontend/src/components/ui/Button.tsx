@@ -5,7 +5,7 @@ import { cn } from "../../lib/cn";
 type Tone = "primary" | "quiet" | "ghost" | "danger";
 
 const TONES: Record<Tone, string> = {
-  primary: "bg-ink text-[#fff] border-ink hover:bg-body hover:border-body",
+  primary: "bg-ink text-white border-ink hover:bg-body hover:border-body",
   quiet: "bg-surface text-ink border-line hover:bg-subtle",
   ghost: "bg-transparent text-body border-transparent hover:bg-subtle hover:text-ink",
   danger: "bg-transparent text-fail border-fail/40 hover:bg-del-bg hover:border-fail",
