@@ -15,8 +15,12 @@ openai==1.35.14
 # Environment config
 python-dotenv==1.0.1
 
-# HTTP client
+# HTTP client (sync + async)
 requests==2.31.0
+httpx==0.28.1
+
+# Session signing (GitHub OAuth cookie)
+itsdangerous==2.2.0
 
 # Pydantic
 pydantic==2.7.4

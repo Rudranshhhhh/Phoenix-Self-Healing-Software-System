@@ -29,10 +29,22 @@ class Config:
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-    # GitHub
+    # GitHub (static PAT — used by the self-healing pipeline)
     GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
     GITHUB_REPO: str = os.environ.get("GITHUB_REPO", "")
     GITHUB_BASE_BRANCH: str = os.environ.get("GITHUB_BASE_BRANCH", "main")
+
+    # GitHub OAuth App — used by /api/github/* endpoints.
+    # Not required for the core incident pipeline; the endpoints return 501
+    # gracefully when these are absent.
+    GITHUB_CLIENT_ID: str = os.environ.get("GITHUB_CLIENT_ID", "")
+    GITHUB_CLIENT_SECRET: str = os.environ.get("GITHUB_CLIENT_SECRET", "")
+    # Must match the callback URL registered in your GitHub OAuth App settings.
+    GITHUB_REDIRECT_URI: str = os.environ.get(
+        "GITHUB_REDIRECT_URI", "http://localhost:8000/api/github/callback"
+    )
+    # Secret used to sign session cookies.  Generate with: openssl rand -hex 32
+    SESSION_SECRET_KEY: str = os.environ.get("SESSION_SECRET_KEY", "change-me-in-production")
 
     # Git author identity (for commits)
     PHOENIX_GIT_AUTHOR_NAME: str = os.environ.get(

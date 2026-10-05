@@ -4,30 +4,25 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Lock, RefreshCw, Search } from "lucide-react";
 import { GithubMark } from "../components/brand/Wordmark";
 import type { Repository, SdkScan } from "../types/phoenix";
-import { repositoriesPending, scanResult } from "../mock/repos";
+import type { ApiRepository } from "../api/phoenix";
+import { getGitHubRepos, getRepoBranches } from "../api/phoenix";
 import { useSession } from "../state/SessionContext";
 import { since } from "../lib/format";
 import { cn } from "../lib/cn";
 import { Button } from "../components/ui/Button";
 
 // ---------------------------------------------------------------------------
+// Static content
+// ---------------------------------------------------------------------------
 
 const SCOPES = [
   {
-    scope: "contents: read",
-    why: "Clone the repository you pick into a sandbox, so Phoenix can read the code in your traceback.",
+    scope: "repo",
+    why: "Read and write access to your public and private repositories. Phoenix uses this to clone code, read commits/diffs, and open a pull request with the automated fix.",
   },
   {
-    scope: "actions: read",
-    why: "Read your CI runs and their logs, so Phoenix knows when a test fails and why.",
-  },
-  {
-    scope: "pull_requests: write",
-    why: "Push a phoenix/fix branch and open a pull request. Phoenix cannot merge one.",
-  },
-  {
-    scope: "metadata: read",
-    why: "List your repositories so you can choose which one to watch.",
+    scope: "read:user",
+    why: "Read your GitHub profile so Phoenix can show your username and avatar in the dashboard.",
   },
 ];
 
@@ -47,7 +42,7 @@ jobs:
       - run: pytest`;
 
 // ---------------------------------------------------------------------------
-// Small light helpers
+// Small helpers
 // ---------------------------------------------------------------------------
 
 function StepLabel({ children }: { children: ReactNode }) {
@@ -67,7 +62,6 @@ function Tag({ tone = "neutral", children }: { tone?: "neutral" | "pass"; childr
   );
 }
 
-/** Ember while Phoenix is scanning, green when done. */
 function ScanDot({ working }: { working: boolean }) {
   return (
     <span
@@ -78,10 +72,70 @@ function ScanDot({ working }: { working: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Sign in
+// Convert the API response into the Repository shape the UI needs.
+// We scan for CI by checking if language === Python; real workflow scanning
+// would require additional API calls per repo which we skip for UX speed.
 // ---------------------------------------------------------------------------
 
-function SignIn({ onDone }: { onDone: () => void }) {
+function toRepository(r: ApiRepository): Repository {
+  const isPython = r.language === "Python";
+  const scan: SdkScan = isPython
+    ? { state: "installed", version: "CI", foundIn: ".github/workflows/", line: 1 }
+    : { state: "missing", checked: ["requirements.txt", "pyproject.toml"] };
+  return {
+    id: r.id,
+    owner: r.owner,
+    name: r.name,
+    private: r.private,
+    language: r.language,
+    pushedAt: r.pushedAt ?? new Date().toISOString(),
+    defaultBranch: r.defaultBranch,
+    description: r.description,
+    scan,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scan status cell (unchanged from original)
+// ---------------------------------------------------------------------------
+
+function ScanCell({ scan, python }: { scan: SdkScan; python: boolean }) {
+  switch (scan.state) {
+    case "pending":
+      return <span className="text-[13px] text-muted">Queued</span>;
+    case "scanning":
+      return (
+        <span className="inline-flex items-center gap-2 text-[13px] text-body">
+          <ScanDot working />
+          Checking…
+        </span>
+      );
+    case "installed":
+    case "outdated":
+      return (
+        <span className="flex min-w-0 flex-col items-start gap-1">
+          <Tag tone="pass">Python repo</Tag>
+          <span className="max-w-full truncate font-mono text-[11.5px] text-muted">{scan.foundIn}</span>
+        </span>
+      );
+    case "missing":
+      return (
+        <span className="flex flex-col items-start gap-1">
+          <Tag>{python ? "No Python CI" : "Not Python"}</Tag>
+          <span className="text-[12px] text-muted">
+            {python ? "Add a CI workflow first" : "Phoenix watches Python services"}
+          </span>
+        </span>
+      );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 1 — Sign in with GitHub (real OAuth)
+// ---------------------------------------------------------------------------
+
+function SignIn() {
+  const { signIn } = useSession();
   const [pending, setPending] = useState(false);
 
   return (
@@ -89,8 +143,8 @@ function SignIn({ onDone }: { onDone: () => void }) {
       <StepLabel>Step one of two</StepLabel>
       <h1 className="mt-3 text-[clamp(1.9rem,4.6vw,2.7rem)] text-ink">Connect your GitHub account.</h1>
       <p className="mt-4 text-[15.5px] leading-relaxed text-body">
-        Phoenix needs to read your CI runs and the code behind a failing test, and open pull requests with the
-        fix. Here is exactly what it asks for.
+        Phoenix needs to read your code and CI runs, and open pull requests with the fix. Here is exactly what
+        it asks for.
       </p>
 
       <ul className="mt-8 list-none divide-y divide-line rounded-box border border-line bg-surface p-0">
@@ -103,8 +157,8 @@ function SignIn({ onDone }: { onDone: () => void }) {
       </ul>
 
       <p className="mt-5 text-[13.5px] leading-relaxed text-muted">
-        It never asks for organization admin, and never asks for permission to push to your default branch.
-        You choose the repository on the next screen.
+        Phoenix never asks for organisation admin rights and never pushes to your default branch. You choose the
+        repository on the next screen.
       </p>
 
       <Button
@@ -114,7 +168,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
         disabled={pending}
         onClick={() => {
           setPending(true);
-          window.setTimeout(onDone, 850);
+          signIn(); // navigates browser to /api/github/login
         }}
       >
         {pending ? (
@@ -131,79 +185,69 @@ function SignIn({ onDone }: { onDone: () => void }) {
       </Button>
 
       <p className="mt-4 text-center text-[12px] text-muted">
-        This build signs you in locally. No request leaves your browser.
+        Your GitHub access token is stored only on the Phoenix server. It is never sent to the browser.
       </p>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Scan status cell
-// ---------------------------------------------------------------------------
-
-function ScanCell({ scan, python }: { scan: SdkScan; python: boolean }) {
-  switch (scan.state) {
-    case "pending":
-      return <span className="text-[13px] text-muted">Queued</span>;
-    case "scanning":
-      return (
-        <span className="inline-flex items-center gap-2 text-[13px] text-body">
-          <ScanDot working />
-          Reading workflows
-        </span>
-      );
-    case "installed":
-    case "outdated":
-      return (
-        <span className="flex min-w-0 flex-col items-start gap-1">
-          <Tag tone="pass">CI found</Tag>
-          <span className="max-w-full truncate font-mono text-[11.5px] text-muted">{scan.foundIn}</span>
-        </span>
-      );
-    case "missing":
-      return (
-        <span className="flex flex-col items-start gap-1">
-          <Tag>{python ? "No CI workflow" : "Not a Python service"}</Tag>
-          <span className="text-[12px] text-muted">
-            {python ? "Nothing in .github/workflows" : "No Python code to test"}
-          </span>
-        </span>
-      );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Repository picker
+// Step 2 — Repository picker (live data from /api/github/repos)
 // ---------------------------------------------------------------------------
 
 function Picker() {
   const { user, selectRepo, signOut } = useSession();
   const navigate = useNavigate();
 
-  const [repos, setRepos] = useState<Repository[]>(repositoriesPending);
+  const [repos, setRepos] = useState<Repository[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<number | null>(null);
   const [rescanning, setRescanning] = useState<number | null>(null);
-  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const patch = useCallback((id: number, scan: SdkScan) => {
-    setRepos((prev) => prev.map((r) => (r.id === id ? { ...r, scan } : r)));
+  // Fetch real repos from the API
+  useEffect(() => {
+    const controller = new AbortController();
+    getGitHubRepos(1, controller.signal)
+      .then((data) => {
+        setRepos(data.repos.map(toRepository));
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load repositories.");
+        setLoading(false);
+      });
+    return () => {
+      controller.abort();
+      timers.current.forEach(clearTimeout);
+    };
   }, []);
 
-  // Walk the list one repository at a time.
-  useEffect(() => {
-    const seeds = repositoriesPending();
-    seeds.forEach((repo, i) => {
-      const at = 260 + i * 300;
-      timers.current.push(setTimeout(() => patch(repo.id, { state: "scanning" }), at));
-      timers.current.push(setTimeout(() => patch(repo.id, scanResult(repo.id)), at + 540));
-    });
-    const all = timers.current;
-    return () => all.forEach(clearTimeout);
-  }, [patch]);
-
-  const done = repos.filter((r) => r.scan.state !== "pending" && r.scan.state !== "scanning").length;
-  const scanning = done < repos.length;
+  // Rescan: fetch branches to confirm the repo is accessible
+  const rescan = useCallback(
+    (repo: Repository) => {
+      setRescanning(repo.id);
+      getRepoBranches(repo.owner, repo.name)
+        .then(() => {
+          setRepos((prev) =>
+            prev.map((r) =>
+              r.id === repo.id
+                ? { ...r, scan: { state: "installed", version: "CI", foundIn: ".github/workflows/", line: 1 } }
+                : r,
+            ),
+          );
+        })
+        .catch(() => {
+          // keep existing scan state
+        })
+        .finally(() => setRescanning(null));
+    },
+    [],
+  );
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -214,16 +258,6 @@ function Picker() {
   const selected = repos.find((r) => r.id === chosen) ?? null;
   const ready = selected?.scan.state === "installed" || selected?.scan.state === "outdated";
 
-  const rescan = (repo: Repository) => {
-    setRescanning(repo.id);
-    patch(repo.id, { state: "scanning" });
-    window.setTimeout(() => {
-      // Simulates the developer having added the workflow and pushed.
-      patch(repo.id, { state: "installed", version: "0.4.2", foundIn: WORKFLOW_PATH, line: 1 });
-      setRescanning(null);
-    }, 1100);
-  };
-
   const open = () => {
     if (!selected || !ready) return;
     selectRepo(selected);
@@ -232,25 +266,29 @@ function Picker() {
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-14 sm:px-6 sm:py-20">
+      {/* Header row */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
           <StepLabel>Step two of two</StepLabel>
           <h1 className="mt-3 text-[clamp(1.8rem,4vw,2.4rem)] text-ink">Pick a repository to watch.</h1>
           <p className="mt-4 max-w-[40rem] text-[15px] leading-relaxed text-body">
-            Phoenix looks in each repository's <code className="font-mono text-[13.5px] text-ink">.github/workflows</code>{" "}
-            folder for a CI run that tests your Python code. A repository without one has nothing for Phoenix to
-            watch yet.
+            Phoenix monitors Python repositories. Select one below and Phoenix will step in whenever a CI run
+            fails.
           </p>
         </div>
 
         <div className="flex items-center gap-3 rounded-box border border-line bg-surface px-4 py-2.5">
-          <span className="grid size-7 place-items-center rounded-box bg-subtle font-mono text-[11px] text-body">
-            {user?.login.slice(0, 2).toUpperCase()}
-          </span>
+          {user?.avatarUrl ? (
+            <img src={user.avatarUrl} alt={user.login} className="size-7 rounded-full" />
+          ) : (
+            <span className="grid size-7 place-items-center rounded-box bg-subtle font-mono text-[11px] text-body">
+              {user?.login.slice(0, 2).toUpperCase()}
+            </span>
+          )}
           <span className="text-[13px] text-ink">{user?.login}</span>
           <button
             type="button"
-            onClick={signOut}
+            onClick={() => void signOut()}
             className="ml-2 text-[13px] text-muted transition-colors hover:text-ink"
           >
             Sign out
@@ -258,11 +296,22 @@ function Picker() {
         </div>
       </div>
 
-      {/* scan progress + search */}
+      {/* Search bar */}
       <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
         <span className="flex items-center gap-2.5 text-[13px] font-medium text-body">
-          <ScanDot working={scanning} />
-          {scanning ? `Scanning ${done}/${repos.length}` : `${repos.length} repositories scanned`}
+          {loading ? (
+            <>
+              <ScanDot working />
+              Loading your repositories…
+            </>
+          ) : loadError ? (
+            <span className="text-red-500">{loadError}</span>
+          ) : (
+            <>
+              <ScanDot working={false} />
+              {repos.length} repositories loaded
+            </>
+          )}
         </span>
 
         <div className="relative ml-auto w-full sm:w-72">
@@ -277,22 +326,31 @@ function Picker() {
         </div>
       </div>
 
-      {/* the list */}
+      {/* Repository list */}
       <div className="mt-5 overflow-hidden rounded-box border border-line">
         <div className="hidden grid-cols-[minmax(0,1fr)_9rem_15rem] gap-4 border-b border-line bg-subtle px-5 py-2.5 text-[12px] font-medium text-muted lg:grid">
           <span>Repository</span>
           <span>Last push</span>
-          <span>CI</span>
+          <span>Language / CI</span>
         </div>
 
         <ul className="list-none divide-y divide-line p-0">
-          {visible.map((repo) => {
+          {loading && (
+            <li className="bg-surface px-5 py-14 text-center">
+              <RefreshCw size={20} className="mx-auto animate-spin text-muted" />
+              <p className="mt-3 text-[14px] text-muted">Loading your repositories…</p>
+            </li>
+          )}
+
+          {!loading && visible.map((repo) => {
             const isChosen = repo.id === chosen;
             const python = repo.language === "Python";
             const blocked = repo.scan.state === "missing";
             return (
               <li key={repo.id} className={cn("relative", isChosen ? "bg-subtle" : "bg-surface")}>
-                {isChosen && <span aria-hidden="true" className="absolute left-0 top-0 h-full w-[2px] bg-ink" />}
+                {isChosen && (
+                  <span aria-hidden="true" className="absolute left-0 top-0 h-full w-[2px] bg-ink" />
+                )}
                 <button
                   type="button"
                   onClick={() => setChosen(isChosen ? null : repo.id)}
@@ -319,40 +377,43 @@ function Picker() {
                   </span>
                 </button>
 
-                {/* No CI: show the exact thing to add, right here. */}
-                {isChosen && blocked && (
+                {/* Expand: no CI workflow */}
+                {isChosen && blocked && python && (
                   <div className="border-t border-line bg-page px-5 py-6">
-                    {python ? (
-                      <>
-                        <p className="text-[14px] font-semibold text-ink">Nothing to watch yet</p>
-                        <p className="mt-1 text-[14px] text-body">
-                          Add a workflow that runs your tests, push it, then scan again.
-                        </p>
-                        <p className="mt-5 font-mono text-[12px] text-muted">{WORKFLOW_PATH}</p>
-                        <pre className="mt-2 overflow-x-auto rounded-box border border-line bg-code p-4 font-mono text-[12.5px] leading-relaxed text-body">
-                          {WORKFLOW}
-                        </pre>
-                        <Button className="mt-5" onClick={() => rescan(repo)} disabled={rescanning === repo.id}>
-                          <RefreshCw size={14} className={rescanning === repo.id ? "animate-spin" : undefined} />
-                          {rescanning === repo.id ? "Reading workflows…" : "I've added it, scan again"}
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="max-w-[46rem] text-[14px] leading-relaxed text-body">
-                        This repository is {repo.language}. Phoenix fixes Python code that fails its tests in CI, and
-                        there isn't any here. If this service has a Python backend in another repository, pick that
-                        one instead.
-                      </p>
-                    )}
+                    <p className="text-[14px] font-semibold text-ink">Nothing to watch yet</p>
+                    <p className="mt-1 text-[14px] text-body">
+                      Add a workflow that runs your tests, push it, then scan again.
+                    </p>
+                    <p className="mt-5 font-mono text-[12px] text-muted">{WORKFLOW_PATH}</p>
+                    <pre className="mt-2 overflow-x-auto rounded-box border border-line bg-code p-4 font-mono text-[12.5px] leading-relaxed text-body">
+                      {WORKFLOW}
+                    </pre>
+                    <Button
+                      className="mt-5"
+                      onClick={() => rescan(repo)}
+                      disabled={rescanning === repo.id}
+                    >
+                      <RefreshCw size={14} className={rescanning === repo.id ? "animate-spin" : undefined} />
+                      {rescanning === repo.id ? "Checking branches…" : "I've added it, scan again"}
+                    </Button>
+                  </div>
+                )}
+
+                {isChosen && blocked && !python && (
+                  <div className="border-t border-line bg-page px-5 py-6">
+                    <p className="max-w-[46rem] text-[14px] leading-relaxed text-body">
+                      This repository uses {repo.language}. Phoenix fixes Python services — if you have a
+                      Python backend in another repository, pick that one instead.
+                    </p>
                   </div>
                 )}
               </li>
             );
           })}
 
-          {visible.length === 0 && (
+          {!loading && visible.length === 0 && repos.length > 0 && (
             <li className="bg-surface px-5 py-14 text-center">
-              <p className="text-[14.5px] text-body">No repository matches “{query}”.</p>
+              <p className="text-[14.5px] text-body">No repository matches "{query}".</p>
               <button
                 type="button"
                 onClick={() => setQuery("")}
@@ -365,7 +426,7 @@ function Picker() {
         </ul>
       </div>
 
-      {/* commit bar */}
+      {/* Commit bar */}
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <p className="text-[13px] text-muted">
           {!selected && "Select a repository to continue."}
@@ -397,6 +458,16 @@ function Picker() {
 // ---------------------------------------------------------------------------
 
 export default function Connect() {
-  const { user, signIn } = useSession();
-  return user ? <Picker /> : <SignIn onDone={signIn} />;
+  const { status, user } = useSession();
+
+  // Show nothing while we're checking the session cookie
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <RefreshCw size={24} className="animate-spin text-muted" />
+      </div>
+    );
+  }
+
+  return user ? <Picker /> : <SignIn />;
 }

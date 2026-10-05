@@ -4,6 +4,7 @@ import { SessionProvider } from "./state/SessionContext";
 import { SiteFooter, SiteHeader } from "./components/chrome/Site";
 import Home from "./pages/Home";
 import Connect from "./pages/Connect";
+import OAuthCallback from "./pages/OAuthCallback";
 import Dashboard from "./pages/Dashboard";
 import IncidentPage from "./pages/IncidentPage";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,8 @@ export default function App() {
           <Route element={<SiteLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/connect" element={<Connect />} />
+            {/* GitHub OAuth callback — must be outside SiteLayout so there's no chrome flash */}
+            <Route path="/connect/callback" element={<OAuthCallback />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 

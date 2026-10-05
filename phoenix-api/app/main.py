@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 from app.fixtures import SERVER_STARTED, STATIC_INCIDENTS, live_incident
 from app.ingest import IngestEvent, demo_fixtures_enabled, store
 from app.models import Incident, IncidentListResponse, IncidentSummary
+from app.routers.github import router as github_router
 
 app = FastAPI(title="Phoenix API", version="0.1.0")
 
@@ -19,7 +20,11 @@ app.add_middleware(
     allow_origins=[o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,   # required so the session cookie is sent/received
 )
+
+# Mount the GitHub OAuth + repo-read router
+app.include_router(github_router)
 
 
 class HealthResponse(BaseModel):
