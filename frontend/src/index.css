@@ -1,53 +1,11 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Phoenix — "Ledger"
-   A warm-ash ground (brown-black, not slate) lit by a single sodium-lamp
-   accent. Brick and jade are never decorative: they only ever mean broken
-   and healed. Everything is set on hairlines, like a ruled ledger page.
+   Phoenix: warm grey, light.
+   Ember (#FF4F12) only marks where Phoenix is acting right now.
    ========================================================================== */
 
 @theme {
-  /* -- ground ------------------------------------------------------------ */
-  --color-ash-950: #131110;
-  --color-ash-925: #171513;
-  --color-ash-900: #1a1715;
-  --color-ash-850: #211d1a;
-  --color-ash-800: #2a2521;
-  --color-ash-700: #3a332d;
-  --color-ash-600: #4d443c;
-
-  /* -- ink --------------------------------------------------------------- */
-  --color-bone: #f3eee7;
-  --color-bone-2: #a79e93;
-  --color-bone-3: #776d63;
-  --color-bone-4: #574f47;
-
-  /* -- state ------------------------------------------------------------- */
-  --color-sodium: #f0b429; /* brand + awaiting your approval */
-  --color-sodium-dim: #a87c17;
-  --color-brick: #e4573d; /* broken */
-  --color-brick-dim: #8f3625;
-  --color-jade: #57c79a; /* healed / verified */
-  --color-jade-dim: #2f7a5c;
-  --color-iris: #9c8cf0; /* the agent is working */
-
-  /* -- syntax: stays inside the warm family so code never fights the UI ---- */
-  --color-code-kw: #b79cf5;
-  --color-code-lit: #c8b27a;
-  --color-code-cmt: #605850;
-  --color-code-dim: #8d8478;
-
-  /* -- type -------------------------------------------------------------- */
-  --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
-
-  /* -- radii: crisp, never pill ------------------------------------------ */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
-
-  /* -- redesign (warm grey): these win over the Ledger values above ------- */
   --color-page: #E8E4E1;
   --color-surface: #F4F1EE;
   --color-subtle: #ECE8E4;
@@ -61,62 +19,12 @@
   --color-fail: #CF222E;
   --color-add-bg: #E6FFEC;
   --color-del-bg: #FFEBE9;
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --font-dot: "Doto", ui-monospace, monospace;
   --radius-box: 6px;
-
-  /* -- motion ------------------------------------------------------------ */
-  --animate-sweep: sweep 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  --animate-breathe: breathe 2.6s ease-in-out infinite;
-  --animate-caret: caret 1.1s steps(1) infinite;
-  --animate-drift: drift 26s linear infinite;
-
-  @keyframes sweep {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(300%);
-    }
-  }
-  @keyframes breathe {
-    0%,
-    100% {
-      opacity: 0.35;
-      transform: scale(0.9);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-  @keyframes caret {
-    0%,
-    49% {
-      opacity: 1;
-    }
-    50%,
-    100% {
-      opacity: 0;
-    }
-  }
-  @keyframes drift {
-    0% {
-      transform: translate3d(0, 0, 0);
-    }
-    50% {
-      transform: translate3d(-1.5%, 1.5%, 0);
-    }
-    100% {
-      transform: translate3d(0, 0, 0);
-    }
-  }
 }
-
-/* ==========================================================================
-   Base
-   ========================================================================== */
 
 *,
 *::before,
@@ -132,8 +40,8 @@ html {
 
 body {
   margin: 0;
-  background-color: var(--color-ash-950);
-  color: var(--color-bone);
+  background: var(--color-page);
+  color: var(--color-body);
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.6;
@@ -141,13 +49,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-/* Redesign base. Comes after the Ledger body rule so it wins. */
-body {
-  background: var(--color-page);
-  color: var(--color-body);
-  font-family: var(--font-sans);
 }
 
 #root {
@@ -168,9 +69,11 @@ body {
   }
 }
 
-p {
-  margin: 0;
-  text-wrap: pretty;
+@layer base {
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
 }
 
 ::selection {
@@ -202,121 +105,6 @@ p {
   outline-offset: 2px;
 }
 
-/* ==========================================================================
-   Ledger primitives
-   ========================================================================== */
-
-/* Small-caps monospace label. The eyebrow of the whole system. */
-.ledger-label {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-bone-3);
-}
-
-/* Numbers that never jitter as they tick. */
-.tnum {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "zero" 1;
-}
-
-/* A single hairline, the only divider this design uses. */
-.rule {
-  border: 0;
-  border-top: 1px solid var(--color-ash-800);
-  margin: 0;
-}
-
-/* Faint graph-paper ground, for the hero only. */
-.ledger-ground {
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-ash-800) 55%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-ash-800) 55%, transparent) 1px, transparent 1px);
-  background-size: 88px 88px;
-  mask-image: radial-gradient(115% 85% at 50% 0%, #000 0%, transparent 72%);
-}
-
-/* Sodium lamp glow. Used exactly twice on the site. */
-.lamp {
-  background: radial-gradient(
-    58% 46% at 50% 0%,
-    color-mix(in oklab, var(--color-sodium) 12%, transparent) 0%,
-    transparent 70%
-  );
-}
-
-/* ==========================================================================
-   Code + traceback surfaces
-   ========================================================================== */
-
-.mono-pane {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.72;
-  font-variant-ligatures: none;
-  tab-size: 4;
-}
-
-@media (min-width: 768px) {
-  .mono-pane {
-    font-size: 13px;
-  }
-}
-
-/* Diff rows. The one place red and green are allowed to sit together. */
-.diff-del {
-  background: color-mix(in oklab, var(--color-brick) 11%, transparent);
-  box-shadow: inset 2px 0 0 var(--color-brick);
-}
-.diff-add {
-  background: color-mix(in oklab, var(--color-jade) 11%, transparent);
-  box-shadow: inset 2px 0 0 var(--color-jade);
-}
-
-/* The scan line that reads a traceback. */
-.scanline {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, var(--color-sodium) 55%, transparent),
-    transparent
-  );
-}
-
-/* ==========================================================================
-   Motion, with an off switch
-   ========================================================================== */
-
-.enter {
-  animation: enter 0.62s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.reveal {
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 0.66s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.66s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.reveal[data-shown="true"] {
-  opacity: 1;
-  transform: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -327,10 +115,6 @@ p {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-  .reveal {
-    opacity: 1;
-    transform: none;
   }
 }
 

@@ -56,9 +56,9 @@ export interface Patch {
 
 export interface Validation {
   result: "PASS" | "FAIL";
-  tests_run: number;
-  tests_passed: number;
-  bug_reproduced_before_patch: boolean;
+  tests_run: number | null; // null when the pipeline doesn't report it
+  tests_passed: number | null; // null when the pipeline doesn't report it
+  bug_reproduced_before_patch: boolean | null; // null when the pipeline doesn't report it
   bug_reproduces_after_patch: boolean;
   duration_seconds: number;
   output: string; // test runner output
@@ -67,7 +67,7 @@ export interface Validation {
 }
 
 export interface PullRequest {
-  number: number;
+  number: number | null; // null when the pipeline doesn't report it
   url: string;
   branch: string; // e.g. phoenix/fix/INC-001
   state: "open" | "merged" | "closed";

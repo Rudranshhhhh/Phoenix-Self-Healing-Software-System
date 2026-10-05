@@ -49,9 +49,9 @@ class Patch(BaseModel):
 
 class Validation(BaseModel):
     result: Literal["PASS", "FAIL"]
-    tests_run: int
-    tests_passed: int
-    bug_reproduced_before_patch: bool
+    tests_run: int | None
+    tests_passed: int | None
+    bug_reproduced_before_patch: bool | None
     bug_reproduces_after_patch: bool
     duration_seconds: float
     output: str
@@ -60,7 +60,7 @@ class Validation(BaseModel):
 
 
 class PullRequest(BaseModel):
-    number: int
+    number: int | None
     url: str
     branch: str
     state: Literal["open", "merged", "closed"]

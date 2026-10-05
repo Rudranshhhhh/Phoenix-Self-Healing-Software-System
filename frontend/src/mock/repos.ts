@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Stand-in for GET /api/github/user and /api/github/repos.
-// The scan field is what the Phoenix service reports after reading each repo's
-// requirements.txt / pyproject.toml / Pipfile looking for phoenix-sdk.
+// The scan field is what Phoenix reports after looking in each repo's
+// .github/workflows folder for a CI run that tests Python code.
 // ---------------------------------------------------------------------------
 
 import type { GithubUser, Repository, SdkScan } from "../types/phoenix";
@@ -32,7 +32,7 @@ const SEEDS: RepoSeed[] = [
     pushedAt: hoursAgo(3),
     defaultBranch: "main",
     description: "Payments and checkout for the storefront. FastAPI + Postgres.",
-    result: { state: "installed", version: "0.4.2", foundIn: "requirements.txt", line: 14 },
+    result: { state: "installed", version: "0.4.2", foundIn: ".github/workflows/tests.yml", line: 14 },
   },
   {
     id: 2,
@@ -43,7 +43,7 @@ const SEEDS: RepoSeed[] = [
     pushedAt: hoursAgo(19),
     defaultBranch: "main",
     description: "Stock levels, reservations, and warehouse sync.",
-    result: { state: "outdated", version: "0.2.9", latest: "0.4.2", foundIn: "pyproject.toml", line: 31 },
+    result: { state: "outdated", version: "0.2.9", latest: "0.4.2", foundIn: ".github/workflows/ci.yml", line: 31 },
   },
   {
     id: 3,
@@ -65,7 +65,7 @@ const SEEDS: RepoSeed[] = [
     pushedAt: hoursAgo(6),
     defaultBranch: "develop",
     description: "Background jobs: invoicing, exports, nightly reconciliation.",
-    result: { state: "installed", version: "0.4.2", foundIn: "pyproject.toml", line: 22 },
+    result: { state: "installed", version: "0.4.2", foundIn: ".github/workflows/test.yml", line: 22 },
   },
   {
     id: 5,
@@ -75,7 +75,7 @@ const SEEDS: RepoSeed[] = [
     language: "TypeScript",
     pushedAt: hoursAgo(11),
     defaultBranch: "main",
-    description: "Next.js storefront. No Python entrypoint for the SDK to wrap.",
+    description: "Next.js storefront. No Python code for Phoenix to test.",
     result: { state: "missing", checked: ["package.json"] },
   },
   {
