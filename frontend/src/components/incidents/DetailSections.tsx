@@ -114,16 +114,19 @@ export function ValidationBox({ validation }: { validation: Validation | null })
   }
 
   const pass = validation.result === "PASS";
-  const checks = [
+  const { tests_passed: passed, tests_run: run, bug_reproduced_before_patch: before } = validation;
+  const counted = passed !== null && run !== null;
+  // good: null = the pipeline didn't report it, so the row stays neutral (muted, no icon).
+  const checks: { label: string; value: string; good: boolean | null }[] = [
     {
       label: "Tests passed",
-      value: `${validation.tests_passed} of ${validation.tests_run}`,
-      good: validation.tests_passed === validation.tests_run,
+      value: `${passed ?? "—"} of ${run ?? "—"}`,
+      good: counted ? passed === run : null,
     },
     {
       label: "Bug reproduced before patch",
-      value: validation.bug_reproduced_before_patch ? "Yes" : "No",
-      good: validation.bug_reproduced_before_patch,
+      value: before === null ? "Not checked" : before ? "Yes" : "No",
+      good: before,
     },
     {
       label: "Bug still reproduces after patch",
@@ -148,7 +151,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
           {pass ? "Passed" : "Failed"}
         </div>
         <p className="mb-3 mt-1 text-[14px] text-muted">
-          {validation.tests_passed} of {validation.tests_run} tests passed in the sandbox.
+          {passed ?? "—"} of {run ?? "—"} tests passed in the sandbox.
         </p>
 
         <dl>
@@ -158,10 +161,10 @@ export function ValidationBox({ validation }: { validation: Validation | null })
               <dd
                 className={cn(
                   "flex items-center gap-1.5 whitespace-nowrap font-semibold",
-                  c.good ? "text-pass" : "text-fail",
+                  c.good === null ? "text-muted" : c.good ? "text-pass" : "text-fail",
                 )}
               >
-                <Tick good={c.good} />
+                {c.good !== null && <Tick good={c.good} />}
                 {c.value}
               </dd>
             </div>
@@ -223,7 +226,7 @@ export function PullRequestBox({
             rel="noopener noreferrer"
             className="text-[16px] font-semibold text-ink underline underline-offset-[3px]"
           >
-            Pull request #{pr.number}
+            {pr.number === null ? "Pull request" : `Pull request #${pr.number}`}
           </a>
           {title && <p className="mb-1.5 mt-0.5 text-[14px] text-body">{title}</p>}
           <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted">

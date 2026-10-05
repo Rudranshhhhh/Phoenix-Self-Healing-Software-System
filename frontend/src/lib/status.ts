@@ -1,8 +1,6 @@
-import type { ComponentProps } from "react";
-import type { Chip } from "../components/ui/Primitives";
 import type { IncidentStatus } from "../types/incident";
 
-export type ChipTone = NonNullable<ComponentProps<typeof Chip>["tone"]>;
+export type ChipTone = "neutral" | "sodium" | "brick" | "jade" | "iris";
 
 const LABELS: Record<IncidentStatus, string> = {
   detected: "Detected",
