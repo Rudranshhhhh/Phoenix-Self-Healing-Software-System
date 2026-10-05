@@ -1,5 +1,5 @@
 """
-Phoenix Agent - Project Monitor (Day 3)
+Phoenix Agent - Project Monitor
 
 Point Phoenix at ANY folder that contains a Dockerfile: it builds the image,
 runs the container, watches it (live logs + crash), always cleans up, and
@@ -7,6 +7,7 @@ returns the failure in the team format {error, stack_trace, container_id}.
 
 CLI (from the repo root):
     python -m agent.runtime.project_monitor <project_folder> [--timeout 30] [--full]
+                                            [--save-dir .phoenix\\failures]
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from typing import Optional
 from docker.errors import APIError, BuildError, DockerException
 
 from agent.runtime.docker_runtime import DockerRuntime, FailureReport
+from agent.runtime.failure_store import save_failure
 from agent.runtime.log_watcher import watch_for_failure
 
 # "phoenix-run-" prefix keeps us away from the compose containers
@@ -83,6 +85,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("project", type=Path, help="folder containing a Dockerfile")
     parser.add_argument("--timeout", type=float, default=30.0, help="seconds to watch (default 30)")
     parser.add_argument("--full", action="store_true", help="print the full report, not just the team format")
+    parser.add_argument("--save-dir", type=Path, default=None,
+                        help="also save the failure as a JSON file in this folder")
     args = parser.parse_args(argv)
 
     try:
@@ -99,6 +103,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
     payload = report.to_dict() if args.full else to_agent_event(report)
     print(json.dumps(payload, indent=2))
+    if args.save_dir is not None:
+        saved = save_failure(report, args.save_dir)
+        print(f"Saved failure report to: {saved}", file=sys.stderr)
     return 0
 
 
