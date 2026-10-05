@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 import threading
 import logging
 from flask import Flask, jsonify
@@ -27,20 +26,29 @@ logger = logging.getLogger("sample-app")
 # Global health status toggle
 _is_healthy = True
 
-# Global memory leak leak-list to prevent garbage collection
+# Global memory leak bucket to prevent garbage collection
 _memory_leak_bucket = []
 
 
 @app.get("/health")
 def health():
-    if _is_healthy:
-        return jsonify({"status": "healthy", "service": "sample-backend"}), 200
-    else:
-        return jsonify({"status": "unhealthy", "error": "Internal Server Error"}), 500
+    """Return health status based on the global _is_healthy flag."""
+    try:
+        if _is_healthy:
+            return jsonify({"status": "healthy", "service": "sample-backend"}), 200
+        else:
+            return (
+                jsonify({"status": "unhealthy", "error": "Internal Server Error"}),
+                500,
+            )
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Unexpected error in health endpoint")
+        return jsonify({"status": "error", "error": str(exc)}), 500
 
 
 @app.get("/break-health")
 def break_health():
+    """Force the health endpoint to return an unhealthy response."""
     global _is_healthy
     _is_healthy = False
     logger.warning("🩺 Sample App: Health endpoint broken manually")
@@ -49,6 +57,7 @@ def break_health():
 
 @app.get("/restore-health")
 def restore_health():
+    """Restore the health endpoint to a healthy response."""
     global _is_healthy
     _is_healthy = True
     logger.info("🩺 Sample App: Health endpoint restored manually")
@@ -57,6 +66,7 @@ def restore_health():
 
 @app.get("/crash")
 def crash():
+    """Simulate an immediate process exit."""
     logger.critical("💥 Sample App: Simulating immediate process exit")
     # Gracefully notify logs, then kill process
     sys.stdout.flush()
@@ -65,24 +75,28 @@ def crash():
 
 @app.get("/leak")
 def leak():
+    """Simulate a memory leak by allocating ~150 MB."""
     logger.warning("💧 Sample App: Simulating memory leak...")
     # Allocate approximately 150MB of memory by appending large strings
-    for i in range(15):
-        # ~10MB string replication
+    for _ in range(15):
+        # ~10 MB string replication
         _memory_leak_bucket.append("X" * (10 * 1024 * 1024))
-    logger.warning("💧 Sample App: Leak complete. Bucket size is now %d items", len(_memory_leak_bucket))
+    logger.warning(
+        "💧 Sample App: Leak complete. Bucket size is now %d items",
+        len(_memory_leak_bucket),
+    )
     return jsonify({"message": "Allocated ~150MB memory. Memory leak active."}), 200
 
 
 @app.get("/cpu")
 def cpu_spike():
+    """Spawn a background thread that burns CPU indefinitely."""
     logger.warning("🔥 Sample App: Simulating CPU spike...")
 
-    # Spawn a background thread that does intensive calculations indefinitely
     def _cpu_burner():
         logger.info("🔥 Background burner started")
         while True:
-            # Busy-wait loop
+            # Busy‑wait loop
             _ = 23908 * 92384
 
     t = threading.Thread(target=_cpu_burner, daemon=True)
@@ -92,9 +106,14 @@ def cpu_spike():
 
 @app.get("/db")
 def db_check():
+    """Check PostgreSQL connectivity."""
     import psycopg2
+
     try:
-        url = os.getenv("DATABASE_URL", "postgresql://sampleuser:samplepassword@postgres:5432/sampledb")
+        url = os.getenv(
+            "DATABASE_URL",
+            "postgresql://sampleuser:samplepassword@postgres:5432/sampledb",
+        )
         conn = psycopg2.connect(url, connect_timeout=3)
         cur = conn.cursor()
         cur.execute("SELECT 1")
@@ -107,7 +126,9 @@ def db_check():
 
 @app.get("/cache")
 def cache_check():
+    """Check Redis connectivity."""
     import redis
+
     try:
         url = os.getenv("REDIS_URL", "redis://redis:6379/0")
         r = redis.from_url(url, socket_timeout=3)
