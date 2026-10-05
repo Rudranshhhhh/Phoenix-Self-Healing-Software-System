@@ -34,11 +34,13 @@ function subline(summary: IncidentSummary, incident: Incident | null, branch: st
       return "Running the tests in a Docker sandbox.";
     case "validated": {
       const v = incident?.validation;
-      return v ? `${v.tests_passed} of ${v.tests_run} tests passed.` : "The fix passed validation.";
+      return v ? `${v.tests_passed ?? "—"} of ${v.tests_run ?? "—"} tests passed.` : "The fix passed validation.";
     }
     case "pr_opened": {
       const pr = incident?.pull_request;
-      return pr ? `Pull request #${pr.number} is waiting for review.` : "The pull request is waiting for review.";
+      return pr && pr.number !== null
+        ? `Pull request #${pr.number} is waiting for review.`
+        : "The pull request is waiting for review.";
     }
     case "rejected":
       return "The fix failed validation, so no pull request was opened.";

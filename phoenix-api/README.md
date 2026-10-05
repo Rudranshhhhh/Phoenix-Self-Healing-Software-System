@@ -114,6 +114,11 @@ already in `INC-NNN` form are kept as they are.
 
 Every event also accepts optional `at` (ISO-8601 time; defaults to now) and `message` (timeline text).
 
+Demo run without the agent (stdlib only, API must be running): `python scripts/send_demo_events.py`
+sends detected → diagnosing → fix_proposed → validating → validated → pr_opened for a new uuid,
+2 seconds apart. Options: `--reject` (ends in a failed validation), `--delay 0.5`,
+`--url http://127.0.0.1:8000/api/ingest/events`, `--token …` (default: `PHOENIX_INGEST_TOKEN`).
+
 Environment variables:
 
 | Variable | Default | Meaning |
