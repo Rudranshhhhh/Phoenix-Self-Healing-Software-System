@@ -88,6 +88,23 @@ export function SiteFooter() {
         <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-4 text-[12px] text-muted">
           <span>Phoenix · self-healing software system</span>
           <span className="sm:ml-auto">Demo repo: phoenix-demo/orders-api. Real pipeline runs appear next to the demo incidents.</span>
+          <p className="font-mono text-[12px] text-muted">
+            build{" "}
+            {__COMMIT__ === "dev" ? (
+              "dev"
+            ) : (
+              <a
+                href={`https://github.com/Rudranshhhhh/Phoenix-Self-Healing-Software-System/commit/${__COMMIT__}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted underline-offset-2 hover:text-ink hover:underline"
+              >
+                {__COMMIT__}
+              </a>
+            )}
+            {" · "}
+            {__BUILD_DATE__}
+          </p>
         </div>
       </div>
     </footer>

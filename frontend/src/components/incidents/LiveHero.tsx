@@ -52,11 +52,14 @@ export function LiveHero({
   incident,
   branch,
   repoName,
+  say = false,
 }: {
   summary: IncidentSummary | null;
   incident: Incident | null;
   branch: string;
   repoName?: string;
+  /** chick speech bubble on the arc (Home only) */
+  say?: boolean;
 }) {
   const active = summary !== null && isActive(summary.status);
   const now = useNow(active);
@@ -68,7 +71,7 @@ export function LiveHero({
           <h2 className="text-[20px] font-semibold leading-[1.3] text-ink">No incidents.</h2>
           <p className="text-[14px] text-muted">Phoenix is watching {branch}.</p>
         </div>
-        <PipelineArc status={null} repo={repoName ? { name: repoName, branch } : undefined} />
+        <PipelineArc status={null} repo={repoName ? { name: repoName, branch } : undefined} say={say} />
       </section>
     );
   }
@@ -85,7 +88,7 @@ export function LiveHero({
         <p className="text-[14px] text-muted">{subline(summary, incident, branch)}</p>
       </div>
 
-      <PipelineArc status={summary.status} incidentId={summary.id} detail={clock} repo={repoName ? { name: repoName, branch } : undefined} />
+      <PipelineArc status={summary.status} incidentId={summary.id} detail={clock} repo={repoName ? { name: repoName, branch } : undefined} say={say} />
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-t border-line pb-1 pt-3.5">
         <span className="min-w-0 text-[14px] text-body [overflow-wrap:anywhere]">

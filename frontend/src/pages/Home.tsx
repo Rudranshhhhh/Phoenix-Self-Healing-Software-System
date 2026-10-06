@@ -5,6 +5,8 @@ import { GithubMark } from "../components/brand/Wordmark";
 import { ButtonLink } from "../components/ui/Button";
 import { HealReplay } from "../components/home/HealReplay";
 import { ArchitectureSketch } from "../components/home/ArchitectureSketch";
+import { TryIt } from "../components/home/TryIt";
+import { TeamStrip } from "../components/home/TeamStrip";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
@@ -79,12 +81,12 @@ function LiveDemo() {
   const detail = useIncident(hero?.id ?? null).incident;
   const repo = { name: REPO.name, branch: REPO.branch };
 
-  if (loading) return <PipelineArc status={null} repo={repo} />;
+  if (loading) return <PipelineArc status={null} repo={repo} say />;
 
   if (error && incidents.length === 0) {
     return (
       <>
-        <PipelineArc status={null} repo={repo} />
+        <PipelineArc status={null} repo={repo} say />
         <p className="pb-4 text-center text-[14px] text-muted">
           The live demo is offline. Start phoenix-api on port 8000 to see Phoenix at work.
         </p>
@@ -98,6 +100,7 @@ function LiveDemo() {
       incident={detail && hero && detail.id === hero.id ? detail : null}
       branch={REPO.branch}
       repoName={REPO.name}
+      say
     />
   );
 }
@@ -196,6 +199,8 @@ export default function Home() {
 
       <ArchitectureSketch />
 
+      <TryIt />
+
       {/* ================= limits ================= */}
       <section id="limits" className="scroll-mt-24 border-t border-line">
         <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 sm:py-24">
@@ -223,6 +228,8 @@ export default function Home() {
           </ul>
         </div>
       </section>
+
+      <TeamStrip />
 
       {/* ================= closing ================= */}
       <section className="border-t border-line">

@@ -213,3 +213,44 @@ body {
   transform-origin: left;
   animation: heal-bar linear forwards;
 }
+
+/* Halo behind the arc chick */
+.phx-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 230px;
+  height: 230px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 0.5) 45%,
+    rgba(255, 255, 255, 0)
+  );
+}
+.phx-halo[data-acting="true"] {
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 79, 18, 0.18),
+    rgba(255, 79, 18, 0.07) 50%,
+    rgba(255, 79, 18, 0)
+  );
+  animation: phx-halo-breathe 3.2s ease-in-out infinite;
+}
+@keyframes phx-halo-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.85; }
+  50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+}
+@media (max-width: 640px) {
+  .phx-halo { width: 180px; height: 180px; }
+}
+
+/* Chick speech bubble (live card) */
+.phx-say {
+  opacity: 0;
+  animation: heal-in 0.35s ease 0.15s forwards;
+}

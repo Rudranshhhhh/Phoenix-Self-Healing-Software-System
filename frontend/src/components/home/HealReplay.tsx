@@ -6,7 +6,7 @@ import { Button } from "../ui/Button";
 const STEP_MS = 3200;
 
 type Tone = "fail" | "pass" | "muted" | "add" | "del";
-type Line = { text: string; tone?: Tone; sans?: boolean };
+type Line = { text: string; tone?: Tone; sans?: boolean; note?: string };
 type Frame = {
   label: string;
   title: string;
@@ -27,7 +27,7 @@ const FRAMES: Frame[] = [
     lines: [
       { text: "Traceback (most recent call last):", tone: "muted" },
       { text: '  File "/app/app.py", line 9, in get_product' },
-      { text: '    return product["price"]' },
+      { text: '    return product["price"]', note: "this line broke the build" },
       { text: "KeyError: 'price'", tone: "fail" },
     ],
   },
@@ -54,7 +54,7 @@ const FRAMES: Frame[] = [
     lines: [
       { text: "@@ line 9 @@", tone: "muted" },
       { text: '-    return product["price"]', tone: "del" },
-      { text: '+    return product["cost"]', tone: "add" },
+      { text: '+    return product["cost"]', tone: "add", note: "one line changed" },
     ],
   },
   {
@@ -66,7 +66,7 @@ const FRAMES: Frame[] = [
     lines: [
       { text: "$ pytest -q", tone: "muted" },
       { text: "test_app.py::test_get_product_apple_does_not_raise PASSED" },
-      { text: "1 passed in 2.45s", tone: "pass" },
+      { text: "1 passed in 2.45s", tone: "pass", note: "this test crashed before the fix" },
     ],
   },
   {
@@ -76,7 +76,7 @@ const FRAMES: Frame[] = [
     mood: "happy",
     acting: false,
     lines: [
-      { text: "branch  phoenix/fix/INC-109" },
+      { text: "branch  phoenix/fix/INC-109", note: "not pushed yet" },
       { text: "status  validated · 8s from crash to tested fix" },
       {
         sans: true,
@@ -237,10 +237,15 @@ export function HealReplay() {
               {frame.lines.map((line, i) => (
                 <div
                   key={i}
-                  className={`heal-line ${lineClass(line)}`}
+                  className={`heal-line flex items-baseline gap-6 ${lineClass(line)}`}
                   style={{ animationDelay: `${150 + i * 220}ms` }}
                 >
-                  {line.text}
+                  <span className="min-w-0">{line.text}</span>
+                  {line.note && (
+                    <span className="hidden shrink-0 font-sans text-[12px] italic text-muted md:inline">
+                      ← {line.note}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

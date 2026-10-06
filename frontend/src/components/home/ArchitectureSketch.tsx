@@ -67,7 +67,7 @@ export function ArchitectureSketch() {
             <p className="mb-3 font-mono text-[12px] text-muted">fix path</p>
             <Flow nodes={FIX_PATH} edges={FIX_EDGES} />
           </div>
-          <div className="md:max-w-[62%]">
+          <div>
             <p className="mb-3 font-mono text-[12px] text-muted">reporting</p>
             <Flow nodes={REPORT_PATH} edges={REPORT_EDGES} />
           </div>
