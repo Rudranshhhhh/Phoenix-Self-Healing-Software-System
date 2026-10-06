@@ -195,3 +195,21 @@ body {
   .phx-arc-wbox.wa, .phx-fade-a { animation: phx-op-a .3s ease-out; }
   .phx-arc-wbox.wb, .phx-fade-b { animation: phx-op-b .3s ease-out; }
 }
+
+/* Home replay (HealReplay) */
+@keyframes heal-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.heal-line {
+  opacity: 0;
+  animation: heal-in 0.35s ease forwards;
+}
+@keyframes heal-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.heal-bar {
+  transform-origin: left;
+  animation: heal-bar linear forwards;
+}
