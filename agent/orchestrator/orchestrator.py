@@ -42,6 +42,28 @@ def _without_github_env():
         os.environ.update(saved)
 
 
+def _start_line(project_dir: Path, file: str, old_code: str) -> Optional[int]:
+    """1-based line where old_code starts in the project file, or None if it isn't found exactly once."""
+    try:
+        path = (project_dir / file).resolve()
+        if not path.is_relative_to(project_dir) or not old_code.strip():
+            return None
+        text = path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+    if text.count(old_code) != 1:
+        return None
+    return text[: text.index(old_code)].count("\n") + 1
+
+
+def _patch_payload(project_dir: Path, p: Any) -> dict:
+    payload = {"file": p.file, "old_code": p.old_code, "new_code": p.new_code}
+    start_line = _start_line(project_dir, p.file, p.old_code)
+    if start_line is not None:
+        payload["start_line"] = start_line
+    return payload
+
+
 def _default_monitor(project_dir: Path, timeout: float) -> Any:
     from agent.runtime.project_monitor import monitor_project
 
@@ -145,19 +167,20 @@ class Orchestrator:
             },
             patch={
                 "explanation": llm.patch.explanation,
-                "patches": [
-                    {"file": p.file, "old_code": p.old_code, "new_code": p.new_code} for p in llm.patch.patches
-                ],
+                "patches": [_patch_payload(project_dir, p) for p in llm.patch.patches],
             },
         )
 
         workspace = create_workspace(project_dir, self.workspaces_root, result.dashboard_id)
         result.workspace = workspace
-        self.ingest.send(agent_id, "validating", message="Testing the patch in a sandbox copy")
+        pipeline = self.pipeline_factory(self.run_lint)
+        config = getattr(pipeline, "_config", None)
+        environment = "docker" if getattr(config, "run_docker", False) is True else "local"
+        self.ingest.send(
+            agent_id, "validating", environment=environment, message="Testing the patch in a sandbox copy"
+        )
         with _without_github_env():
-            outcome = self.pipeline_factory(self.run_lint).run(
-                incident_id=result.dashboard_id, repo_path=workspace, llm_result=llm
-            )
+            outcome = pipeline.run(incident_id=result.dashboard_id, repo_path=workspace, llm_result=llm)
 
         v = outcome.validation
         if v is None:
@@ -170,6 +193,7 @@ class Orchestrator:
             "duration_seconds": v.duration_seconds,
             "completed_at": v.completed_at.isoformat() if v.completed_at else None,
             "original_failure_resolved": v.original_failure_resolved,
+            "environment": environment,
         }
         if not v.validated:
             self.ingest.send(agent_id, "rejected", validation=validation, message=v.reason or "Patch rejected")
@@ -185,6 +209,7 @@ class Orchestrator:
             agent_id,
             "validated",
             validation=validation,
+            branch=branch,
             message=f"Sandbox passed. Fix committed on {branch} in a local workspace (not pushed).",
         )
         result.status, result.message = "validated", f"Fix committed on {branch} in {workspace}"
