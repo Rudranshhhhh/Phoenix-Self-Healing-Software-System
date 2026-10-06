@@ -1,16 +1,20 @@
-import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useMemo } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Printer } from "lucide-react";
 import type { Incident } from "../types/incident";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { useNow } from "../hooks/useNow";
 import { useSession } from "../state/SessionContext";
 import { AppHeader } from "../components/chrome/AppHeader";
+import { Button } from "../components/ui/Button";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { SectionBox } from "../components/incidents/SectionBox";
 import { StatusBadge } from "../components/incidents/StatusBadge";
 import { TracebackBox } from "../components/incidents/TracebackBox";
 import { PatchBox, PendingLine, PullRequestBox, RootCauseBox, ValidationBox } from "../components/incidents/DetailSections";
 import { IncidentSidebar } from "../components/incidents/IncidentSidebar";
+import { StatusTimeline } from "../components/incidents/StatusTimeline";
+import { TourOverlay } from "../components/tour/TourOverlay";
 import { SHOW_REJECTED } from "../lib/flags";
 import { since } from "../lib/format";
 import { blamedFrame, isActive, stageClock, stageStartMs } from "../lib/incident";
@@ -58,17 +62,20 @@ function IncidentBody({
   branch,
   repoName,
   now,
+  onTour,
 }: {
   incident: Incident;
   branch: string;
   repoName: string;
   now: number;
+  onTour: () => void;
 }) {
   const blame = blamedFrame(incident.error);
   const clock = isActive(incident.status)
     ? stageClock(now - stageStartMs(incident.status, incident.timeline, incident.updated_at))
     : undefined;
   const openedAt = incident.timeline.find((e) => e.status === "pr_opened")?.at ?? null;
+  const timeline = [...incident.timeline].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   return (
     <>
@@ -81,9 +88,18 @@ function IncidentBody({
       <div className="mb-5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5 text-[14px] text-muted">
         <StatusBadge status={incident.status} />
         <SourceMeta incident={incident} branch={branch} />
+        <Button size="sm" onClick={() => window.print()} className="ml-auto print:hidden">
+          <Printer size={14} />
+          Print
+        </Button>
+        <Button size="sm" tone="ghost" className="print:hidden" onClick={onTour}>
+          Tour
+        </Button>
       </div>
 
-      <PipelineArc status={incident.status} incidentId={incident.id} detail={clock} repo={{ name: repoName, branch }} />
+      <div data-tour="arc">
+        <PipelineArc status={incident.status} incidentId={incident.id} detail={clock} repo={{ name: repoName, branch }} />
+      </div>
 
       <div className="mt-5 flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 grow-[999] basis-[560px] flex-col gap-4">
@@ -107,8 +123,15 @@ function IncidentBody({
             />
           )}
           <PendingLine status={incident.status} />
+          <SectionBox title="Timeline">
+            <div className="p-4">
+              <StatusTimeline events={timeline} current={incident.status} />
+            </div>
+          </SectionBox>
         </div>
-        <IncidentSidebar incident={incident} branch={branch} now={now} />
+        <div className="contents print:hidden">
+          <IncidentSidebar incident={incident} branch={branch} now={now} />
+        </div>
       </div>
     </>
   );
@@ -125,17 +148,26 @@ export default function IncidentPage() {
   );
   const now = useNow(incident !== null && isActive(incident.status));
   const hidden = incident?.status === "rejected" && !SHOW_REJECTED;
+  const [params, setParams] = useSearchParams();
+  const touring = params.get("tour") === "1";
+  const closeTour = useCallback(() => {
+    const next = new URLSearchParams(params);
+    next.delete("tour");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   return (
     <div className="min-h-screen">
-      <AppHeader
-        owner={repo.owner}
-        repo={repo.name}
-        branch={repo.defaultBranch}
-        live={!list.loading && list.error === null}
-      />
+      <div className="print:hidden">
+        <AppHeader
+          owner={repo.owner}
+          repo={repo.name}
+          branch={repo.defaultBranch}
+          live={!list.loading && list.error === null}
+        />
+      </div>
       <main className="mx-auto max-w-[1200px] px-4 pb-12 pt-7 sm:px-6">
-        <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-[14px] text-muted">
+        <nav aria-label="Breadcrumb" className="mb-3 flex print:hidden items-center gap-2 text-[14px] text-muted">
           <Link to="/app" className="text-ink underline underline-offset-[3px]">
             Incidents
           </Link>
@@ -151,17 +183,24 @@ export default function IncidentPage() {
           <div className="rounded-box border border-line bg-surface px-6 py-12 text-center">
             <p className="text-[15px] font-semibold text-ink">This incident isn't shown.</p>
             <p className="mt-1 text-[14px] text-muted">Phoenix's fix didn't pass validation, so no pull request was opened.</p>
-            <Link to="/app" className="mt-4 inline-block text-[14px] text-ink underline underline-offset-[3px]">
+            <Link to="/app" className="mt-4 inline-block print:hidden text-[14px] text-ink underline underline-offset-[3px]">
               Back to incidents
             </Link>
           </div>
         ) : (
           <>
             {error && <p className="mb-3 text-[13px] text-muted">Connection lost, retrying…</p>}
-            <IncidentBody incident={incident} branch={repo.defaultBranch} repoName={repo.name} now={now} />
+            <IncidentBody
+              incident={incident}
+              branch={repo.defaultBranch}
+              repoName={repo.name}
+              now={now}
+              onTour={() => setParams({ tour: "1" })}
+            />
           </>
         )}
       </main>
+      {touring && incident && <TourOverlay onClose={closeTour} />}
     </div>
   );
 }

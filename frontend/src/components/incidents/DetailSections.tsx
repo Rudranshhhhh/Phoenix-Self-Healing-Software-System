@@ -49,7 +49,7 @@ export function RootCauseBox({ diagnosis }: { diagnosis: Diagnosis }) {
     : null;
   const read = diagnosis.context_files.length;
   return (
-    <SectionBox title="Root cause" meta="Found by Phoenix">
+    <SectionBox title="Root cause" meta="Found by Phoenix" tour="root-cause">
       <div className="p-4">
         <p className="mb-1.5 text-[16px] font-semibold leading-[1.4] text-ink">{diagnosis.root_cause}</p>
         <p className="mb-3.5 max-w-[72ch] text-[14px] leading-relaxed text-body">{diagnosis.explanation}</p>
@@ -83,6 +83,7 @@ export function PatchBox({ patch }: { patch: Patch }) {
   return (
     <SectionBox
       title="Proposed patch"
+      tour="diff"
       meta={
         <>
           <span className="font-mono">{what}</span>
@@ -104,7 +105,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
 
   if (!validation) {
     return (
-      <SectionBox title="Validation" meta="Running now">
+      <SectionBox title="Validation" meta="Running now" tour="validation">
         <div className="flex items-center gap-2.5 p-4 text-[14px] font-semibold text-ink">
           <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-ember" />
           Running the tests in a Docker sandbox
@@ -138,6 +139,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
   return (
     <SectionBox
       title="Validation"
+      tour="validation"
       meta={`Docker sandbox, ${validation.duration_seconds.toFixed(1)}s, finished ${since(validation.finished_at)}`}
     >
       <div className="p-4">
@@ -183,7 +185,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
             type="button"
             aria-expanded={showOutput}
             onClick={() => setShowOutput((v) => !v)}
-            className="inline-flex min-h-[44px] items-center rounded-box border border-line bg-surface px-3 text-[13px] font-medium text-body hover:bg-subtle sm:min-h-8"
+            className="inline-flex min-h-[44px] items-center print:hidden rounded-box border border-line bg-surface px-3 text-[13px] font-medium text-body hover:bg-subtle sm:min-h-8"
           >
             {showOutput ? "Hide test output" : "Show test output"}
           </button>
@@ -216,7 +218,7 @@ export function PullRequestBox({
   branch: string;
 }) {
   return (
-    <SectionBox title="Pull request" meta={openedAt ? `Opened by Phoenix ${since(openedAt)}` : "Opened by Phoenix"}>
+    <SectionBox title="Pull request" tour="pr" meta={openedAt ? `Opened by Phoenix ${since(openedAt)}` : "Opened by Phoenix"}>
       <div className="flex items-start gap-2.5 p-4">
         <StatusIcon status="pr_opened" className="mt-1" />
         <div className="min-w-0">

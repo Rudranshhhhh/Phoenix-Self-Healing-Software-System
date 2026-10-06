@@ -23,6 +23,16 @@ export function arcPosition(status: ArcStatus) {
   return { index: ARC_STAGES.findIndex((s) => s.status === status), rejected: false };
 }
 
+const SAY: Record<ArcStatus, string> = {
+  detected: "A test just failed. Grabbing the traceback.",
+  diagnosing: "Reading the code around the error.",
+  fix_proposed: "Writing the smallest fix I can.",
+  validating: "Running your tests on the patch.",
+  validated: "Tests pass. The fix is on its own branch.",
+  pr_opened: "PR is open. Your turn to review.",
+  rejected: "Tests failed, so I left your code alone.",
+};
+
 const spin = (k: number) => `rotate(calc(var(--arc-step) * ${k}))`;
 
 type Props = {
@@ -36,13 +46,16 @@ type Props = {
   className?: string;
   /** corner label; defaults to the demo repo in lib/repo.ts */
   repo?: { name: string; branch: string };
+  /** speech bubble next to the chick (Home live card only) */
+  say?: boolean;
 };
 
-export function PipelineArc({ status, incidentId, detail, variant = "soft", className, repo = REPO }: Props) {
+export function PipelineArc({ status, incidentId, detail, variant = "soft", className, repo = REPO, say = false }: Props) {
   const empty = status === null;
   const { index, rejected } = empty ? { index: 0, rejected: false } : arcPosition(status);
   const parity = index % 2 === 0 ? "a" : "b";
   const acting = status !== null && isActing(status);
+  const line = status ? SAY[status] : "Waiting for a build to break.";
 
   const ticks = useMemo(() => {
     const out: { k: number; op: number; done: boolean }[] = [];
@@ -123,7 +136,23 @@ export function PipelineArc({ status, incidentId, detail, variant = "soft", clas
 
       {empty && <span aria-hidden="true" className="phx-arc-fdot" />}
       <div className={cn("phx-arc-char", `phx-fade-${parity}`)}>
-        <PhoenixChick key={mood} mood={mood} variant={variant} />
+        <span className="relative isolate inline-block">
+          <span aria-hidden className="phx-halo" data-acting={acting ? "true" : "false"} />
+          <PhoenixChick key={mood} mood={mood} variant={variant} />
+          {say && (
+            <span
+              key={status ?? "idle"}
+              role="status"
+              className="phx-say absolute left-[calc(100%+12px)] top-2 hidden w-max max-w-[210px] rounded-box border border-line bg-code px-3 py-2 text-left text-[13px] leading-[1.45] text-body sm:block"
+            >
+              <span
+                aria-hidden
+                className="absolute -left-[6px] top-3 h-2.5 w-2.5 rotate-45 border-b border-l border-line bg-code"
+              />
+              {line}
+            </span>
+          )}
+        </span>
       </div>
       {!empty && (
         <>

@@ -4,39 +4,45 @@ import { ArrowRight } from "lucide-react";
 import { GithubMark } from "../components/brand/Wordmark";
 import { ButtonLink } from "../components/ui/Button";
 import { HealReplay } from "../components/home/HealReplay";
+import { ArchitectureSketch } from "../components/home/ArchitectureSketch";
+import { TryIt } from "../components/home/TryIt";
+import { TeamStrip } from "../components/home/TeamStrip";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { isActive } from "../lib/incident";
 import { SHOW_REJECTED } from "../lib/flags";
 import { REPO } from "../lib/repo";
+import { TOUR_URL } from "../components/tour/TourOverlay";
 
 const HERO_FRESH_MS = 10 * 60 * 1000;
 
 const STAGES = [
   {
     name: "Detected",
-    body: "A CI run fails on your branch. Phoenix opens an incident with the traceback and the commit that broke it.",
+    who: "CI",
+    body: "A test fails on your branch, or the app crashes in its container. Phoenix gets the traceback.",
   },
   {
     name: "Diagnosing",
-    body: "It reads the stack and your code, and names the file and line it blames, with how sure it is.",
+    who: "Phoenix",
+    body: "It reads the traceback and the code around it, and names the line it thinks is wrong.",
   },
   {
     name: "Fix proposed",
-    body: "It writes the smallest change that should stop the failure. Nothing touches your repository yet.",
+    who: "Phoenix",
+    body: "It writes the smallest change that should fix that line. Nothing else in the file moves.",
   },
-  {
-    name: "Validating",
-    body: "The patch runs against your test suite in a throwaway Docker sandbox.",
-  },
+  { name: "Validating", who: "Phoenix", body: "The patch runs against your tests on a throwaway copy of the repo. Lint first, then pytest." },
   {
     name: "Validated",
-    body: "Every test passed in the sandbox. The fix is ready for a pull request.",
+    who: "Phoenix",
+    body: "If every test passes, the fix goes on its own branch, phoenix/fix/INC-xxx.",
   },
   {
     name: "PR opened",
-    body: "Phoenix pushes a phoenix/fix branch and opens a pull request that links back to the incident.",
+    who: "You",
+    body: "Phoenix opens a pull request. Nothing merges until someone on your team approves it.",
   },
 ];
 
@@ -76,12 +82,12 @@ function LiveDemo() {
   const detail = useIncident(hero?.id ?? null).incident;
   const repo = { name: REPO.name, branch: REPO.branch };
 
-  if (loading) return <PipelineArc status={null} repo={repo} />;
+  if (loading) return <PipelineArc status={null} repo={repo} say />;
 
   if (error && incidents.length === 0) {
     return (
       <>
-        <PipelineArc status={null} repo={repo} />
+        <PipelineArc status={null} repo={repo} say />
         <p className="pb-4 text-center text-[14px] text-muted">
           The live demo is offline. Start phoenix-api on port 8000 to see Phoenix at work.
         </p>
@@ -95,6 +101,7 @@ function LiveDemo() {
       incident={detail && hero && detail.id === hero.id ? detail : null}
       branch={REPO.branch}
       repoName={REPO.name}
+      say
     />
   );
 }
@@ -129,6 +136,9 @@ export default function Home() {
           <ButtonLink to="/app" size="lg">
             See the live dashboard
           </ButtonLink>
+          <ButtonLink to={TOUR_URL} tone="ghost" size="lg">
+            Take the 1-minute tour
+          </ButtonLink>
         </div>
 
         <p className="mt-5 text-[13px] text-muted">Python services · GitHub Actions · Docker sandbox</p>
@@ -155,35 +165,45 @@ export default function Home() {
 
       {/* ================= how it works ================= */}
       <section id="how" className="scroll-mt-24 border-t border-line">
-        <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 sm:py-24">
-          <p className="text-[14px] font-medium text-muted">How it works</p>
-          <h2 className="mt-3 max-w-[36rem] text-[clamp(1.85rem,3.6vw,2.6rem)] text-ink">
-            From a red build to a reviewed fix.
-          </h2>
-          <p className="mt-4 max-w-[40rem] text-[15px] leading-relaxed text-body">
-            Every incident moves through the same six stages. The dashboard shows where each one is, live.
-          </p>
+        <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6 sm:py-20">
+          <div className="grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-16">
+            <div className="md:sticky md:top-24 md:self-start">
+              <p className="text-[14px] font-medium text-muted">How it works</p>
+              <h2 className="mt-2 text-[clamp(1.6rem,3.2vw,2.2rem)] text-ink">What happens when a build breaks</h2>
+              <p className="mt-3 text-[16px] leading-[1.6] text-body">
+                Six steps. Phoenix does the middle four. The last one is always a person.
+              </p>
+            </div>
 
-          <ol className="mt-10 grid list-none gap-px overflow-hidden rounded-box border border-line bg-line p-0 sm:grid-cols-2 lg:grid-cols-3">
-            {STAGES.map((stage, i) => (
-              <li key={stage.name} className="flex flex-col bg-surface p-5 sm:p-6">
-                <span className="font-mono text-[12px] tabular-nums text-muted">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="mt-3 font-sans text-[16px] font-semibold leading-snug tracking-normal text-ink">
-                  {stage.name}
-                </h3>
-                <p className="mt-2 text-[14px] leading-relaxed text-body">{stage.body}</p>
-              </li>
-            ))}
-          </ol>
-
-          <p className="mt-5 max-w-[42rem] text-[14px] leading-relaxed text-muted">
-            If the patch fails a test, the incident stops at Validating and is marked rejected, with the reason.
-            No pull request is opened.
-          </p>
+            <div>
+              <ol className="border-t border-line">
+                {STAGES.map((s, i) => (
+                  <li
+                    key={s.name}
+                    className="grid grid-cols-[2.5rem_1fr] gap-x-4 gap-y-1 border-b border-line py-5 sm:grid-cols-[2.5rem_10rem_1fr]"
+                  >
+                    <span className="font-mono text-[13px] text-muted">0{i + 1}</span>
+                    <div>
+                      <p className="text-[15px] font-medium text-ink">{s.name}</p>
+                      <p className="mt-0.5 font-mono text-[12px] text-muted">{s.who}</p>
+                    </div>
+                    <p className="col-start-2 text-[15px] leading-[1.6] text-body sm:col-start-3 sm:row-start-1">
+                      {s.body}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-6 max-w-[40rem] text-[14px] leading-[1.6] text-muted">
+                If the tests fail, Phoenix stops at step 4, marks the incident rejected and leaves your code alone.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
+
+      <ArchitectureSketch />
+
+      <TryIt />
 
       {/* ================= limits ================= */}
       <section id="limits" className="scroll-mt-24 border-t border-line">
@@ -212,6 +232,8 @@ export default function Home() {
           </ul>
         </div>
       </section>
+
+      <TeamStrip />
 
       {/* ================= closing ================= */}
       <section className="border-t border-line">
