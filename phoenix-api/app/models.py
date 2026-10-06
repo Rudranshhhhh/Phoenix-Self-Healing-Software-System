@@ -84,6 +84,7 @@ class Incident(BaseModel):
     validation: Validation | None = None
     pull_request: PullRequest | None = None
     fix_branch: str | None = None
+    simulated: bool = False
     timeline: list[TimelineEntry]
     created_at: datetime
     updated_at: datetime
@@ -98,6 +99,7 @@ class IncidentSummary(BaseModel):
     source_type: SourceType
     validation_result: Literal["PASS", "FAIL"] | None = None
     pr_url: str | None = None
+    simulated: bool = False
     created_at: datetime
     updated_at: datetime
 

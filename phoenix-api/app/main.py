@@ -6,8 +6,10 @@ from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
+from app import demo_run
 from app.fixtures import SERVER_STARTED, STATIC_INCIDENTS, live_incident
 from app.ingest import IngestEvent, demo_fixtures_enabled, store
 from app.models import Incident, IncidentListResponse, IncidentSummary
@@ -55,6 +57,7 @@ def summarize(incident: Incident) -> IncidentSummary:
         source_type=incident.source.type,
         validation_result=incident.validation.result if incident.validation else None,
         pr_url=incident.pull_request.url if incident.pull_request else None,
+        simulated=incident.simulated,
         created_at=incident.created_at,
         updated_at=incident.updated_at,
     )
@@ -110,3 +113,12 @@ def ingest_event(event: IngestEvent, x_phoenix_token: Optional[str] = Header(def
         return store.apply(event)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/demo/run", status_code=202, responses={409: {"description": "A simulated run is already in progress"}})
+async def run_demo() -> JSONResponse:
+    """Replays the INC-109 run as a simulated incident (no Docker, no LLM). No token: the data is fixed."""
+    running = demo_run.running_id()
+    if running:
+        return JSONResponse(status_code=409, content={"incident_id": running})
+    return JSONResponse(status_code=202, content={"incident_id": demo_run.start()})

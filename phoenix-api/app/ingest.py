@@ -103,6 +103,7 @@ class IngestEvent(BaseModel):
     pull_request: Optional[InPullRequest] = None
     environment: Optional[Environment] = None  # for "validating", which has no validation yet
     branch: Optional[str] = None  # fix branch, sent with "validated"
+    simulated: Optional[bool] = None  # set on "detected" by the demo replay (app/demo_run.py)
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +301,8 @@ class IncidentStore:
 
             if ev.repo:
                 cur["repo"] = ev.repo
+            if ev.simulated is not None:
+                cur["simulated"] = ev.simulated
             if ev.source:
                 cur["source"] = ev.source.model_dump()
             if ev.error:
@@ -392,6 +395,21 @@ class IncidentStore:
             self._save()
             return incident
 
+    def remove_simulated(self) -> list[str]:
+        """Drops every simulated incident. Their id mappings stay (as "removed:<key>") so numbering keeps counting up."""
+        with self._lock:
+            gone = {k for k, v in self._incidents.items() if v.get("simulated")}
+            if not gone:
+                return []
+            for incident_id in gone:
+                del self._incidents[incident_id]
+            self._ids = {
+                (f"removed:{key}" if value in gone and not key.startswith("removed:") else key): value
+                for key, value in self._ids.items()
+            }
+            self._save()
+            return sorted(gone)
+
     @staticmethod
     def _new(incident_id: str, ev: IngestEvent, at: str) -> dict:
         return {
@@ -405,6 +423,7 @@ class IncidentStore:
             "validation": None,
             "pull_request": None,
             "fix_branch": None,
+            "simulated": False,
             "timeline": [],
             "created_at": at,
             "updated_at": at,

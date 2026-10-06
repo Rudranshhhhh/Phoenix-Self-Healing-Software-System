@@ -6,7 +6,8 @@ import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { useNow } from "../hooks/useNow";
 import { useSession } from "../state/SessionContext";
 import { AppHeader } from "../components/chrome/AppHeader";
-import { Button } from "../components/ui/Button";
+import { Button, ButtonLink } from "../components/ui/Button";
+import { PhoenixChick } from "../components/phoenix/PhoenixChick";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { SectionBox } from "../components/incidents/SectionBox";
 import { StatusBadge } from "../components/incidents/StatusBadge";
@@ -16,7 +17,8 @@ import { IncidentSidebar } from "../components/incidents/IncidentSidebar";
 import { StatusTimeline } from "../components/incidents/StatusTimeline";
 import { TourOverlay } from "../components/tour/TourOverlay";
 import { SHOW_REJECTED } from "../lib/flags";
-import { since } from "../lib/format";
+import { duration, since } from "../lib/format";
+import { isFinished, timelineSpanSecs } from "../components/incidents/incidentText";
 import { blamedFrame, isActive, stageClock, stageStartMs } from "../lib/incident";
 import { REPO } from "../lib/repo";
 
@@ -71,9 +73,12 @@ function IncidentBody({
   onTour: () => void;
 }) {
   const blame = blamedFrame(incident.error);
-  const clock = isActive(incident.status)
-    ? stageClock(now - stageStartMs(incident.status, incident.timeline, incident.updated_at))
-    : undefined;
+  // Finished incidents stop the clock: show first to last event instead of time since the stage began.
+  const clock = isFinished(incident.status)
+    ? incident.timeline.length > 0
+      ? duration(timelineSpanSecs(incident.timeline))
+      : undefined
+    : stageClock(now - stageStartMs(incident.status, incident.timeline, incident.updated_at));
   const openedAt = incident.timeline.find((e) => e.status === "pr_opened")?.at ?? null;
   const timeline = [...incident.timeline].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
@@ -87,6 +92,9 @@ function IncidentBody({
 
       <div className="mb-5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5 text-[14px] text-muted">
         <StatusBadge status={incident.status} />
+        {incident.simulated && (
+          <span className="rounded-box border border-line bg-subtle px-2 text-[12px] text-muted">Simulated run</span>
+        )}
         <SourceMeta incident={incident} branch={branch} />
         <Button size="sm" onClick={() => window.print()} className="ml-auto print:hidden">
           <Printer size={14} />
@@ -146,7 +154,8 @@ export default function IncidentPage() {
     () => sessionRepo ?? { owner: REPO.owner, name: REPO.name, defaultBranch: REPO.branch },
     [sessionRepo],
   );
-  const now = useNow(incident !== null && isActive(incident.status));
+  const now = useNow(incident !== null && isActive(incident.status) && !isFinished(incident.status));
+  const notFound = !incident && error !== null && /\b404\b/.test(error.message);
   const hidden = incident?.status === "rejected" && !SHOW_REJECTED;
   const [params, setParams] = useSearchParams();
   const touring = params.get("tour") === "1";
@@ -175,7 +184,16 @@ export default function IncidentPage() {
           <span className="font-dot text-[15px] font-bold text-ink">{id}</span>
         </nav>
 
-        {!incident ? (
+        {notFound ? (
+          <div className="flex flex-col items-center px-6 py-12 text-center">
+            <PhoenixChick mood="dizzy" size={72} />
+            <h1 className="mt-4 text-[20px] font-semibold text-ink">No incident {id}</h1>
+            <p className="mt-1 text-[14px] text-muted">It may have been removed, or the id is wrong.</p>
+            <ButtonLink to="/app" className="mt-5">
+              Back to incidents
+            </ButtonLink>
+          </div>
+        ) : !incident ? (
           <p className="text-[14px] text-muted">
             {loading || !error ? "Loading…" : `Couldn't load ${id}: ${error.message}. Retrying…`}
           </p>

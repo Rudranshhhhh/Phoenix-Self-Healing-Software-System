@@ -3,6 +3,8 @@ import type { Incident, IncidentStatus, IncidentSummary } from "../../types/inci
 import { PipelineArc } from "../phoenix/PipelineArc";
 import { blamedFile, isActive, stageClock, stageStartMs } from "../../lib/incident";
 import { useNow } from "../../hooks/useNow";
+import { duration } from "../../lib/format";
+import { isFinished, sandboxPhrase, timelineSpanSecs } from "./incidentText";
 
 const VERB: Record<IncidentStatus, string> = {
   detected: "Picked up",
@@ -31,7 +33,7 @@ function subline(summary: IncidentSummary, incident: Incident | null, branch: st
         : "Writing the smallest change that stops it.";
     }
     case "validating":
-      return "Running the tests in a Docker sandbox.";
+      return `Running the tests in a ${sandboxPhrase(incident?.validation?.environment)}.`;
     case "validated": {
       const v = incident?.validation;
       return v ? `${v.tests_passed ?? "—"} of ${v.tests_run ?? "—"} tests passed.` : "The fix passed validation.";
@@ -62,7 +64,7 @@ export function LiveHero({
   say?: boolean;
 }) {
   const active = summary !== null && isActive(summary.status);
-  const now = useNow(active);
+  const now = useNow(active && !isFinished(summary.status));
 
   if (!summary) {
     return (
@@ -76,7 +78,14 @@ export function LiveHero({
     );
   }
 
-  const clock = active ? stageClock(now - stageStartMs(summary.status, incident?.timeline, summary.updated_at)) : undefined;
+  // Finished incidents stop the clock: show first to last event instead of time since the stage began.
+  const clock = isFinished(summary.status)
+    ? incident && incident.id === summary.id && incident.timeline.length > 0
+      ? duration(timelineSpanSecs(incident.timeline))
+      : undefined
+    : active
+      ? stageClock(now - stageStartMs(summary.status, incident?.timeline, summary.updated_at))
+      : undefined;
   const file = blamedFile(incident);
 
   return (

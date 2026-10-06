@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TOUR_URL } from "../tour/TourOverlay";
+import { runDemo } from "../../api/phoenix";
 
 const LIST = [
   { keys: ["?"], label: "Show this list" },
   { keys: ["g", "h"], label: "Go to Home" },
   { keys: ["g", "d"], label: "Go to the dashboard" },
   { keys: ["t"], label: "Start the demo tour" },
+  { keys: ["r"], label: "Run a live demo" },
   { keys: ["Esc"], label: "Close" },
 ];
 
@@ -49,6 +51,11 @@ export function KeyboardShortcuts() {
       } else if (e.key === "t") {
         setOpen(false);
         navigate(TOUR_URL);
+      } else if (e.key === "r") {
+        setOpen(false);
+        runDemo()
+          .then(({ incident_id }) => navigate(`/app/incidents/${incident_id}`))
+          .catch(() => {});
       }
     };
     window.addEventListener("keydown", onKey);

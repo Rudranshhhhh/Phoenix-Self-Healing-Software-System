@@ -4,6 +4,7 @@ import { duration } from "../../lib/format";
 import { statusLabel } from "../../lib/status";
 import { blamedFrame, isActing, isActive } from "../../lib/incident";
 import { Chip } from "./DetailSections";
+import { isFinished, timelineSpanSecs } from "./incidentText";
 
 const DOTS = 12;
 
@@ -13,11 +14,14 @@ interface StageRow {
   status: IncidentStatus;
   secs: number;
   tone: Tone;
+  /** last stage of a finished incident: no end time, so no duration */
+  open?: boolean;
 }
 
 /** One row per stage the incident has been in, from the timeline. Rejected / PR opened are end states, not rows. */
 function stageRows(incident: Incident, now: number): StageRow[] {
   const tl = incident.timeline;
+  const finished = isFinished(incident.status);
   const rows: StageRow[] = [];
   for (let i = 0; i < tl.length; i++) {
     const entry = tl[i];
@@ -30,6 +34,8 @@ function stageRows(incident: Incident, now: number): StageRow[] {
         secs: Math.max(0, (new Date(next.at).getTime() - start) / 1000),
         tone: next.status === "rejected" ? "fail" : "done",
       });
+    } else if (finished) {
+      rows.push({ status: entry.status, secs: 0, tone: "done", open: true });
     } else {
       rows.push({ status: entry.status, secs: Math.max(0, (now - start) / 1000), tone: isActing(entry.status) ? "now" : "wait" });
     }
@@ -78,7 +84,8 @@ function runNumber(url: string | null): string | null {
 export function IncidentSidebar({ incident, branch, now }: { incident: Incident; branch: string; now: number }) {
   const rows = stageRows(incident, now);
   const max = Math.max(60, ...rows.map((r) => r.secs));
-  const total = rows.reduce((sum, r) => sum + r.secs, 0);
+  const finished = isFinished(incident.status);
+  const total = finished ? timelineSpanSecs(incident.timeline) : rows.reduce((sum, r) => sum + r.secs, 0);
   const { source, diagnosis, pull_request: pr } = incident;
   const blame = blamedFrame(incident.error);
   const file = diagnosis?.suspect_file ?? blame?.file ?? null;
@@ -92,9 +99,9 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
           {rows.map((r) => (
             <li key={r.status} className="grid grid-cols-[88px_1fr_auto] items-center gap-2 py-[3px] text-[12px]">
               <span>{statusLabel(r.status)}</span>
-              <DotBar secs={r.secs} max={max} tone={r.tone} />
+              {r.open ? <span /> : <DotBar secs={r.secs} max={max} tone={r.tone} />}
               <span className="whitespace-nowrap font-mono tabular-nums text-muted">
-                {duration(r.secs)}
+                {r.open ? "—" : duration(r.secs)}
                 {r.tone === "now" || r.tone === "wait" ? " so far" : ""}
               </span>
             </li>
@@ -108,7 +115,7 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
           )}
         </ul>
         <div className="mt-1.5 flex justify-between border-t border-dashed border-line pt-1.5 text-[12px] text-muted">
-          <span>{isActive(incident.status) ? "Total so far" : "Total"}</span>
+          <span>{isActive(incident.status) && !finished ? "Total so far" : "Total"}</span>
           <span className="font-mono tabular-nums">{duration(total)}</span>
         </div>
       </Part>
@@ -158,7 +165,9 @@ export function IncidentSidebar({ incident, branch, now }: { incident: Incident;
       </Part>
 
       <Part title="Fix branch">
-        {pr ? (
+        {incident.fix_branch ? (
+          <p className="font-mono text-[13px] [overflow-wrap:anywhere]">{incident.fix_branch}</p>
+        ) : pr ? (
           <Chip>{pr.branch}</Chip>
         ) : incident.status === "rejected" ? (
           <Sub>None. The fix didn't pass validation.</Sub>

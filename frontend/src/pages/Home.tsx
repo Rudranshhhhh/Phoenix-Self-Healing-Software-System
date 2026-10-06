@@ -7,6 +7,7 @@ import { HealReplay } from "../components/home/HealReplay";
 import { ArchitectureSketch } from "../components/home/ArchitectureSketch";
 import { TryIt } from "../components/home/TryIt";
 import { TeamStrip } from "../components/home/TeamStrip";
+import { RunDemoButton } from "../components/home/RunDemoButton";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
@@ -139,6 +140,7 @@ export default function Home() {
           <ButtonLink to={TOUR_URL} tone="ghost" size="lg">
             Take the 1-minute tour
           </ButtonLink>
+          <RunDemoButton />
         </div>
 
         <p className="mt-5 text-[13px] text-muted">Python services · GitHub Actions · Docker sandbox</p>

@@ -40,6 +40,7 @@ export function IncidentRows({ incidents }: { incidents: IncidentSummary[] }) {
                     <span className="font-dot text-[15px] font-bold text-ink">{incident.id}</span>
                     <span>
                       {FOUND_IN[incident.source_type]}, updated {since(incident.updated_at)}
+                      {incident.simulated && " · simulated"}
                     </span>
                   </span>
                   {/* phone: pipeline + label under the meta line */}

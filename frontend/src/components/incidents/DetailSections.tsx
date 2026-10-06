@@ -6,6 +6,7 @@ import { cn } from "../../lib/cn";
 import { SectionBox } from "./SectionBox";
 import { DiffBox, diffCounts } from "./DiffBox";
 import { StatusIcon } from "./StatusIcon";
+import { sandboxLabel, sandboxPhrase } from "./incidentText";
 
 const ICON = {
   width: 16,
@@ -108,7 +109,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
       <SectionBox title="Validation" meta="Running now" tour="validation">
         <div className="flex items-center gap-2.5 p-4 text-[14px] font-semibold text-ink">
           <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-ember" />
-          Running the tests in a Docker sandbox
+          Running the tests in a {sandboxPhrase(null)}
         </div>
       </SectionBox>
     );
@@ -140,7 +141,7 @@ export function ValidationBox({ validation }: { validation: Validation | null })
     <SectionBox
       title="Validation"
       tour="validation"
-      meta={`Docker sandbox, ${validation.duration_seconds.toFixed(1)}s, finished ${since(validation.finished_at)}`}
+      meta={`${sandboxLabel(validation.environment)}, ${validation.duration_seconds.toFixed(1)}s, finished ${since(validation.finished_at)}`}
     >
       <div className="p-4">
         <div
@@ -248,7 +249,7 @@ export function PullRequestBox({
 const PENDING: Partial<Record<IncidentStatus, { text: string; ember: boolean }>> = {
   detected: { text: "Diagnosis starts as soon as a worker is free.", ember: false },
   diagnosing: { text: "Phoenix is reading the traceback and the blamed file to find the root cause.", ember: true },
-  fix_proposed: { text: "Waiting for a Docker sandbox to test the patch.", ember: false },
+  fix_proposed: { text: `Waiting for a ${sandboxPhrase(null)} to test the patch.`, ember: false },
   validated: { text: "Passed validation. No pull request yet.", ember: false },
 };
 

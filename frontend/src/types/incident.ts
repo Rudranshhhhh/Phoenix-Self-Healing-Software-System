@@ -64,6 +64,7 @@ export interface Validation {
   output: string; // test runner output
   rejection_reason: string | null; // set when result is FAIL
   finished_at: string;
+  environment?: "docker" | "local" | null; // where the tests ran
 }
 
 export interface PullRequest {
@@ -89,6 +90,8 @@ export interface Incident {
   patch: Patch | null;
   validation: Validation | null;
   pull_request: PullRequest | null;
+  fix_branch?: string | null;
+  simulated?: boolean;
   timeline: TimelineEntry[];
   created_at: string;
   updated_at: string;
@@ -104,6 +107,7 @@ export interface IncidentSummary {
   source_type: SourceType;
   validation_result: "PASS" | "FAIL" | null;
   pr_url: string | null;
+  simulated?: boolean;
   created_at: string;
   updated_at: string;
 }

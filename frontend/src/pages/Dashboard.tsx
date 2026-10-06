@@ -34,6 +34,8 @@ export default function Dashboard() {
   }, [params.owner, params.repo, sessionRepo]);
 
   const isDemo = !sessionRepo && !params.owner;
+  // Connect is still a demo: any other repository is showing the demo repo's incidents.
+  const isOtherRepo = !isDemo && (repo.owner !== REPO.owner || repo.name !== REPO.name);
   const { incidents, loading, error } = incidentList;
   const visible = useMemo(
     () => (SHOW_REJECTED ? incidents : incidents.filter((i) => i.status !== "rejected")),
@@ -71,6 +73,13 @@ export default function Dashboard() {
               <GithubMark size={12} />
               Connect a repository
             </Link>
+          </div>
+        )}
+
+        {isOtherRepo && (
+          <div className="mb-6 rounded-box border border-line bg-surface px-4 py-3 text-[13px] text-muted">
+            Demo data. These incidents come from {REPO.owner}/{REPO.name}. Real incidents for {repo.owner}/{repo.name}{" "}
+            appear once GitHub is connected.
           </div>
         )}
 
