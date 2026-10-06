@@ -31,6 +31,8 @@ EventName = Literal[
     "pr_opened",
 ]
 
+Environment = Literal["docker", "local"]
+
 
 # ---------------------------------------------------------------------------
 # Payload
@@ -62,6 +64,7 @@ class InFilePatch(BaseModel):
     file: str
     old_code: str = ""
     new_code: str = ""
+    start_line: Optional[int] = Field(default=None, ge=1)  # line in the real file where old_code starts
 
 
 class InPatch(BaseModel):
@@ -77,6 +80,7 @@ class InValidation(BaseModel):
     duration_seconds: float = 0.0
     completed_at: Optional[datetime] = None
     original_failure_resolved: Optional[bool] = None
+    environment: Optional[Environment] = None
 
 
 class InPullRequest(BaseModel):
@@ -97,6 +101,8 @@ class IngestEvent(BaseModel):
     patch: Optional[InPatch] = None
     validation: Optional[InValidation] = None
     pull_request: Optional[InPullRequest] = None
+    environment: Optional[Environment] = None  # for "validating", which has no validation yet
+    branch: Optional[str] = None  # fix branch, sent with "validated"
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +112,7 @@ class IngestEvent(BaseModel):
 _INC_RE = re.compile(r"^INC-\d+$")
 _FRAME_RE = re.compile(r'^\s*File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<func>.+?)\s*$')
 _COUNT_RE = re.compile(r"(\d+) (passed|failed|errors?)\b")
+_HUNK_RE = re.compile(r"^@@ -(\d+)(,\d+)? \+(\d+)(,\d+)? @@", re.MULTILINE)
 
 DEFAULT_MESSAGES = {
     "detected": "Failure detected",
@@ -168,14 +175,57 @@ def parse_frames(stack_trace: str, suspect_file: Optional[str], suspect_line: Op
     return frames
 
 
-def build_diff(patches: list[InFilePatch]) -> str:
-    """old_code/new_code pairs -> one unified diff the dashboard can parse."""
+def _lines(code: str) -> list[str]:
+    return [l if l.endswith("\n") else l + "\n" for l in code.splitlines(keepends=True)]
+
+
+def _shift_hunks(diff: str, offset: int) -> str:
+    """Moves every @@ -a,b +c,d @@ header down by ``offset`` lines."""
+    if not offset:
+        return diff
+    return _HUNK_RE.sub(
+        lambda m: f"@@ -{int(m[1]) + offset}{m[2] or ''} +{int(m[3]) + offset}{m[4] or ''} @@", diff
+    )
+
+
+def infer_start_line(patch: InFilePatch, suspect_file: Optional[str], suspect_line: Optional[int]) -> Optional[int]:
+    """Where old_code starts in the real file, guessed from the diagnosis.
+
+    The diagnosis line is taken to be the first line the patch changes.
+    """
+    if not suspect_file or not suspect_line:
+        return None
+    a, b = _norm_path(patch.file), _norm_path(suspect_file)
+    if not (a.endswith(b) or b.endswith(a)):
+        return None
+    matcher = difflib.SequenceMatcher(None, _lines(patch.old_code), _lines(patch.new_code), autojunk=False)
+    first_change = next((i1 for tag, i1, _, _, _ in matcher.get_opcodes() if tag != "equal"), None)
+    if first_change is None:
+        return None
+    start = suspect_line - first_change
+    return start if start >= 1 else None
+
+
+def build_diff(
+    patches: list[InFilePatch], suspect_file: Optional[str] = None, suspect_line: Optional[int] = None
+) -> str:
+    """old_code/new_code pairs -> one unified diff the dashboard can parse.
+
+    Hunk line numbers follow each patch's start_line; a lone patch without
+    one gets it from the diagnosis (see infer_start_line).
+    """
     chunks: list[str] = []
     for patch in patches:
         name = _norm_path(patch.file)
-        old = [l if l.endswith("\n") else l + "\n" for l in patch.old_code.splitlines(keepends=True)]
-        new = [l if l.endswith("\n") else l + "\n" for l in patch.new_code.splitlines(keepends=True)]
-        chunks.extend(difflib.unified_diff(old, new, fromfile=f"a/{name}", tofile=f"b/{name}"))
+        start = patch.start_line
+        if start is None and len(patches) == 1:
+            start = infer_start_line(patch, suspect_file, suspect_line)
+        diff = "".join(
+            difflib.unified_diff(
+                _lines(patch.old_code), _lines(patch.new_code), fromfile=f"a/{name}", tofile=f"b/{name}"
+            )
+        )
+        chunks.append(_shift_hunks(diff, (start or 1) - 1))
     return "".join(chunks)
 
 
@@ -276,9 +326,13 @@ class IncidentStore:
             if ev.patch:
                 cur["patch"] = {
                     "summary": ev.patch.explanation or DEFAULT_MESSAGES["fix_proposed"],
-                    "diff": build_diff(ev.patch.patches),
+                    "diff": build_diff(ev.patch.patches, diag.get("suspect_file"), diag.get("suspect_line")),
                     "files_changed": [_norm_path(p.file) for p in ev.patch.patches],
                 }
+
+            if ev.environment:
+                cur["validation_environment"] = ev.environment  # kept until the validation arrives
+            environment = (ev.validation and ev.validation.environment) or cur.get("validation_environment")
 
             if ev.validation:
                 v = ev.validation
@@ -295,6 +349,7 @@ class IncidentStore:
                     "output": output,
                     "rejection_reason": None if v.validated else (v.reason or ev.message or "Validation failed"),
                     "finished_at": _iso(v.completed_at or ev.at),
+                    "environment": environment,
                 }
             elif ev.event == "failed" and not cur.get("validation"):
                 cur["validation"] = {
@@ -307,6 +362,7 @@ class IncidentStore:
                     "output": "",
                     "rejection_reason": ev.message or "The pipeline stopped with an error",
                     "finished_at": at,
+                    "environment": environment,
                 }
 
             if ev.pull_request and ev.pull_request.pr_url:
@@ -317,6 +373,10 @@ class IncidentStore:
                     "branch": pr.head_branch,
                     "state": "open",
                 }
+                if pr.head_branch:
+                    cur["fix_branch"] = pr.head_branch
+            if ev.branch:
+                cur["fix_branch"] = ev.branch
 
             status = "rejected" if ev.event == "failed" else ev.event
             cur["status"] = status
@@ -344,6 +404,7 @@ class IncidentStore:
             "patch": None,
             "validation": None,
             "pull_request": None,
+            "fix_branch": None,
             "timeline": [],
             "created_at": at,
             "updated_at": at,

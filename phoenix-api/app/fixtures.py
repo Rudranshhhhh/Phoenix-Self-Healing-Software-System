@@ -181,6 +181,7 @@ def build_incident(
         patch=patch if "patch" in reached else None,
         validation=built_validation,
         pull_request=pull_request if "pull_request" in reached else None,
+        fix_branch=pull_request.branch if "pull_request" in reached else None,
         timeline=timeline,
         created_at=timeline[0].at,
         updated_at=timeline[-1].at,
@@ -452,6 +453,7 @@ INC_005 = build_incident(
         files_changed=["app/services/reports.py"],
     ),
     validation=dict(
+        environment="docker",
         result="PASS",
         tests_run=61,
         tests_passed=61,
@@ -540,6 +542,7 @@ INC_006 = build_incident(
         files_changed=["app/services/inventory.py"],
     ),
     validation=dict(
+        environment="docker",
         result="FAIL",
         tests_run=58,
         tests_passed=57,
@@ -649,6 +652,7 @@ INC_007 = build_incident(
         files_changed=["app/services/coupons.py", "app/utils/time.py"],
     ),
     validation=dict(
+        environment="docker",
         result="PASS",
         tests_run=64,
         tests_passed=64,
@@ -748,6 +752,7 @@ def live_incident(seconds_since_start: float) -> Incident:
             files_changed=["app/services/orders.py"],
         ),
         validation=dict(
+            environment="docker",
             result="PASS",
             tests_run=62,
             tests_passed=62,

@@ -226,3 +226,27 @@ def test_dashboard_down_still_runs(project, tmp_path):
     assert result.status == "validated"
     assert result.dashboard_id.startswith("local-")
     assert pipeline.calls[0]["incident_id"] == result.dashboard_id
+
+
+def sent(ingest, name):
+    return next(fields for event, fields in ingest.events if event == name)
+
+
+def test_events_carry_start_line_environment_and_branch(project, tmp_path):
+    orch, ingest, _, _ = make(project, tmp_path)
+    orch.run(project)
+    assert sent(ingest, "fix_proposed")["patch"]["patches"][0]["start_line"] == 6
+    assert sent(ingest, "validating")["environment"] == "local"
+    assert sent(ingest, "validated")["validation"]["environment"] == "local"
+    assert sent(ingest, "validated")["branch"] == "phoenix/fix/INC-101"
+
+
+def test_docker_environment_and_unknown_start_line(project, tmp_path):
+    llm = llm_result()
+    llm.patch.patches[0].old_code = "not in the file"
+    orch, ingest, _, pipeline = make(project, tmp_path, llm=llm, outcome=sandbox_outcome(validated=False))
+    pipeline._config = SimpleNamespace(run_docker=True)
+    orch.run(project)
+    assert "start_line" not in sent(ingest, "fix_proposed")["patch"]["patches"][0]
+    assert sent(ingest, "validating")["environment"] == "docker"
+    assert sent(ingest, "rejected")["validation"]["environment"] == "docker"

@@ -57,6 +57,7 @@ class Validation(BaseModel):
     output: str
     rejection_reason: str | None = None
     finished_at: datetime
+    environment: Literal["docker", "local"] | None = None
 
 
 class PullRequest(BaseModel):
@@ -82,6 +83,7 @@ class Incident(BaseModel):
     patch: Patch | None = None
     validation: Validation | None = None
     pull_request: PullRequest | None = None
+    fix_branch: str | None = None
     timeline: list[TimelineEntry]
     created_at: datetime
     updated_at: datetime

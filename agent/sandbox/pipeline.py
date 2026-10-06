@@ -374,9 +374,10 @@ class SandboxPipeline:
 
         if not pr_result.success:
             logger.warning(
-                "SandboxPipeline [%s]: PR creation failed — %s (branch still pushed)",
+                "SandboxPipeline [%s]: PR creation failed — %s (%s)",
                 incident_id,
                 pr_result.error,
+                "branch was pushed" if git_result.remote_url else "branch kept locally, not pushed",
             )
 
         return PatchOutcome(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -223,3 +224,149 @@ def test_parse_frames_blame():
     assert [f["blame"] for f in parse_frames(TRACE, None, None)] == [False, True]
     assert [f["blame"] for f in parse_frames(TRACE, "app/routes/orders.py", 58)] == [True, False]
     assert parse_frames("", None, None) == []
+
+
+# --- Diff line numbers --------------------------------------------------------
+
+
+def hunk_headers(diff):
+    return [line for line in diff.splitlines() if line.startswith("@@")]
+
+
+def test_build_diff_explicit_start_line():
+    patch = InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE, start_line=16)
+    diff = build_diff([patch])
+    assert hunk_headers(diff) == ["@@ -16,2 +16,2 @@"]
+    # Only the header moves; the body is what difflib produced.
+    unshifted = build_diff([InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE)])
+    assert diff.replace("@@ -16,2 +16,2 @@", "@@ -1,2 +1,2 @@") == unshifted
+
+
+def test_build_diff_explicit_start_line_beats_diagnosis():
+    patch = InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE, start_line=40)
+    assert hunk_headers(build_diff([patch], "app/pricing.py", 17)) == ["@@ -40,2 +40,2 @@"]
+
+
+def test_build_diff_start_line_from_diagnosis():
+    patch = InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE)
+    # Line 17 is the second line of old_code (the first one that changes), so old_code starts at 16.
+    assert hunk_headers(build_diff([patch], "app/pricing.py", 17)) == ["@@ -16,2 +16,2 @@"]
+    assert hunk_headers(build_diff([patch], "/app/app/pricing.py", 17)) == ["@@ -16,2 +16,2 @@"]
+
+
+def test_build_diff_diagnosis_fallback_limits():
+    patch = InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE)
+    other = InFilePatch(file="app/orders.py", old_code="a\n", new_code="b\n")
+    assert hunk_headers(build_diff([patch], "app/pricing.py", 1)) == ["@@ -1,2 +1,2 @@"]  # would be line 0
+    assert hunk_headers(build_diff([patch], "app/orders.py", 17)) == ["@@ -1,2 +1,2 @@"]  # other file
+    assert hunk_headers(build_diff([patch], None, None)) == ["@@ -1,2 +1,2 @@"]
+    # More than one patch: no guessing.
+    assert hunk_headers(build_diff([patch, other], "app/pricing.py", 17)) == ["@@ -1,2 +1,2 @@", "@@ -1 +1 @@"]
+
+
+def test_build_diff_multiple_patches_with_start_lines():
+    diff = build_diff(
+        [
+            InFilePatch(file="app/pricing.py", old_code=OLD_CODE, new_code=NEW_CODE, start_line=16),
+            InFilePatch(file="app/orders.py", old_code="a\n", new_code="b\n", start_line=9),
+        ]
+    )
+    assert hunk_headers(diff) == ["@@ -16,2 +16,2 @@", "@@ -9 +9 @@"]
+
+
+def test_fix_proposed_diff_uses_diagnosis_line(client):
+    inc = run_success(client, "d1")
+    assert hunk_headers(inc["patch"]["diff"]) == ["@@ -16,2 +16,2 @@"]
+
+
+def test_fix_proposed_diff_uses_start_line(client):
+    inc = post(
+        client,
+        "d2",
+        "fix_proposed",
+        patch={
+            "explanation": "x",
+            "patches": [{"file": "app/pricing.py", "old_code": OLD_CODE, "new_code": NEW_CODE, "start_line": 30}],
+        },
+    )
+    assert hunk_headers(inc["patch"]["diff"]) == ["@@ -30,2 +30,2 @@"]
+
+
+def test_bad_start_line(client):
+    body = {
+        "incident_id": "d3",
+        "event": "fix_proposed",
+        "patch": {"patches": [{"file": "a.py", "old_code": "a", "new_code": "b", "start_line": 0}]},
+    }
+    assert client.post(URL, json=body).status_code == 422
+
+
+# --- Validation environment and fix branch -------------------------------------
+
+
+def test_environment_and_fix_branch_round_trip(client):
+    agent_id = str(uuid.uuid4())
+    inc = run_success(client, agent_id)
+    assert inc["validation"]["environment"] is None  # run_success never sends one
+    assert inc["fix_branch"] == f"phoenix/fix/{agent_id}"  # from pr_opened head_branch
+
+    post(client, "e1", "detected")
+    assert post(client, "e1", "validating", environment="local")["validation"] is None
+    inc = post(
+        client,
+        "e1",
+        "validated",
+        branch="phoenix/fix/INC-102",
+        validation={"validated": True, "test_stdout": "=== 3 passed ===", "environment": "docker"},
+    )
+    assert inc["validation"]["environment"] == "docker"
+    assert inc["fix_branch"] == "phoenix/fix/INC-102"
+    assert client.get("/api/incidents/INC-102").json() == inc
+
+
+def test_environment_from_validating_is_kept(client):
+    post(client, "e2", "validating", environment="docker")
+    inc = post(client, "e2", "rejected", validation={"validated": False, "reason": "tests failed"})
+    assert inc["validation"]["environment"] == "docker"
+    assert inc["fix_branch"] is None
+
+    post(client, "e3", "validating", environment="local")
+    assert post(client, "e3", "failed", message="sandbox crashed")["validation"]["environment"] == "local"
+
+
+def test_bad_environment(client):
+    body = {"incident_id": "e4", "event": "validating", "environment": "kubernetes"}
+    assert client.post(URL, json=body).status_code == 422
+
+
+def test_old_store_entries_without_new_fields(client, store):
+    inc = post(client, "e5", "validated", validation={"validated": True})
+    raw = json.loads(store.path.read_text(encoding="utf-8"))
+    del raw["incidents"][inc["id"]]["fix_branch"]
+    del raw["incidents"][inc["id"]]["validation"]["environment"]
+    store.path.write_text(json.dumps(raw), encoding="utf-8")
+    again = IncidentStore(store.path).get(inc["id"])
+    assert again.fix_branch is None and again.validation.environment is None
+
+
+def test_fixture_environment_and_fix_branch(client, monkeypatch):
+    monkeypatch.setenv("DEMO_FIXTURES", "1")
+    for incident_id in ("INC-005", "INC-006", "INC-007"):
+        assert client.get(f"/api/incidents/{incident_id}").json()["validation"]["environment"] == "docker"
+    assert client.get("/api/incidents/INC-007").json()["fix_branch"] == "phoenix/fix/INC-007"
+    assert client.get("/api/incidents/INC-005").json()["fix_branch"] is None
+    assert client.get("/api/incidents/INC-001").json()["fix_branch"] is None
+
+
+# --- List size ----------------------------------------------------------------
+
+
+def test_default_page_size_is_100(client):
+    for _ in range(25):
+        post(client, str(uuid.uuid4()), "detected")
+    listed = client.get("/api/incidents").json()
+    assert listed["page_size"] == 100
+    assert listed["total"] == 25
+    assert len(listed["items"]) == 25
+    assert client.get("/api/incidents?page_size=100").status_code == 200
+    assert client.get("/api/incidents?page_size=101").status_code == 422

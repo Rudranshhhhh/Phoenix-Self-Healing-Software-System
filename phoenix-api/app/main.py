@@ -70,7 +70,7 @@ def list_incidents(
     status: str | None = Query(None, description="Comma-separated statuses, e.g. validated,pr_opened"),
     repo: str | None = Query(None, description="owner/name"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(100, ge=1, le=100),
 ) -> IncidentListResponse:
     incidents = current_incidents()
     if status:
