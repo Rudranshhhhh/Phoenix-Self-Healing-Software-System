@@ -105,6 +105,7 @@ export function SiteFooter() {
             {" · "}
             {__BUILD_DATE__}
           </p>
+          <p className="font-mono text-[12px] text-muted">press ? for shortcuts</p>
         </div>
       </div>
     </footer>

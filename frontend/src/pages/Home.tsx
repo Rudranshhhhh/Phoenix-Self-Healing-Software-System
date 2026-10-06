@@ -13,6 +13,7 @@ import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { isActive } from "../lib/incident";
 import { SHOW_REJECTED } from "../lib/flags";
 import { REPO } from "../lib/repo";
+import { TOUR_URL } from "../components/tour/TourOverlay";
 
 const HERO_FRESH_MS = 10 * 60 * 1000;
 
@@ -134,6 +135,9 @@ export default function Home() {
           </ButtonLink>
           <ButtonLink to="/app" size="lg">
             See the live dashboard
+          </ButtonLink>
+          <ButtonLink to={TOUR_URL} tone="ghost" size="lg">
+            Take the 1-minute tour
           </ButtonLink>
         </div>
 

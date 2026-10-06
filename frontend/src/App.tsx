@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { SessionProvider } from "./state/SessionContext";
 import { SiteFooter, SiteHeader } from "./components/chrome/Site";
+import { KeyboardShortcuts } from "./components/chrome/KeyboardShortcuts";
 import Home from "./pages/Home";
 import Connect from "./pages/Connect";
 import Dashboard from "./pages/Dashboard";
@@ -43,6 +44,7 @@ export default function App() {
     <BrowserRouter>
       <SessionProvider>
         <ScrollToTop />
+        <KeyboardShortcuts />
         <Routes>
           <Route element={<SiteLayout />}>
             <Route path="/" element={<Home />} />
