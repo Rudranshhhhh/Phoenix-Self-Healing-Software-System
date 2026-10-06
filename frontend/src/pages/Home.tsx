@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { GithubMark } from "../components/brand/Wordmark";
 import { ButtonLink } from "../components/ui/Button";
+import { HealReplay } from "../components/home/HealReplay";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { PipelineArc } from "../components/phoenix/PipelineArc";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
@@ -149,6 +150,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <HealReplay />
 
       {/* ================= how it works ================= */}
       <section id="how" className="scroll-mt-24 border-t border-line">
