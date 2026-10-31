@@ -56,7 +56,7 @@ interface SessionValue {
   /** Called by the Connect page after the user picks a repo. */
   selectRepo: (repo: Repository) => void;
   /** Called by OAuthCallback after a successful round-trip to reload the user. */
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<GithubUser>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -74,21 +74,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setUser(u);
         setStatus(u ? "authenticated" : "unauthenticated");
         if (u) {
-          const selected = await getSelectedRepository(controller.signal);
-          if (selected.repository) {
-            const restored: Repository = {
-              id: selected.repository.id,
-              owner: selected.repository.owner,
-              name: selected.repository.name,
-              private: false,
-              language: "Unknown",
-              pushedAt: new Date().toISOString(),
-              defaultBranch: selected.repository.defaultBranch,
-              description: "",
-              scan: { state: "installed", version: "connected", foundIn: "GitHub", line: 1 },
-            };
-            setRepo(restored);
-            writeRepo(restored);
+          try {
+            const selected = await getSelectedRepository(controller.signal);
+            if (selected.repository) {
+              const restored: Repository = {
+                id: selected.repository.id,
+                owner: selected.repository.owner,
+                name: selected.repository.name,
+                private: false,
+                language: "Unknown",
+                pushedAt: new Date().toISOString(),
+                defaultBranch: selected.repository.defaultBranch,
+                description: "",
+                scan: { state: "installed", version: "connected", foundIn: "GitHub", line: 1 },
+              };
+              setRepo(restored);
+              writeRepo(restored);
+            }
+          } catch {
+            // A missing selection must not invalidate an authenticated session.
           }
         }
       })
@@ -134,10 +138,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /** Called by OAuthCallback to pull the user profile after the cookie is set. */
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<GithubUser> => {
     const u = await getGitHubUser();
     setUser(u);
     setStatus(u ? "authenticated" : "unauthenticated");
+    if (!u) {
+      throw new Error("Phoenix could not verify the GitHub session. Please try signing in again.");
+    }
+    return u;
   }, []);
 
   const value = useMemo<SessionValue>(

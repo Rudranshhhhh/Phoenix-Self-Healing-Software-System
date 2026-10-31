@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { GithubMark, Wordmark } from "../brand/Wordmark";
 import { cn } from "../../lib/cn";
+import { useSession } from "../../state/SessionContext";
 
 const NAV = [
   { to: "/#how", label: "How it works" },
@@ -10,6 +11,7 @@ const NAV = [
 
 export function SiteHeader() {
   const [lifted, setLifted] = useState(false);
+  const { status, user } = useSession();
 
   useEffect(() => {
     const onScroll = () => setLifted(window.scrollY > 24);
@@ -42,13 +44,30 @@ export function SiteHeader() {
           <NavLink to="/app" className="hidden text-[14px] text-muted transition-colors hover:text-ink sm:inline">
             Dashboard
           </NavLink>
-          <Link
-            to="/connect"
-            className="inline-flex h-9 items-center gap-2 rounded-box border border-line bg-surface px-3.5 text-[13px] font-medium text-ink transition-colors hover:bg-subtle"
-          >
-            <GithubMark size={14} />
-            Connect GitHub
-          </Link>
+          {status === "authenticated" && user ? (
+            <Link
+              to="/connect"
+              aria-label={`Connected as ${user.login}`}
+              className="inline-flex items-center gap-2 rounded-box border border-line bg-surface px-2.5 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-subtle"
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" className="size-6 rounded-full" />
+              ) : (
+                <span className="grid size-6 place-items-center rounded-full bg-subtle text-[10px]">
+                  {user.login.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+              <span className="hidden max-w-32 truncate sm:inline">{user.login}</span>
+            </Link>
+          ) : (
+            <Link
+              to="/connect"
+              className="inline-flex h-9 items-center gap-2 rounded-box border border-line bg-surface px-3.5 text-[13px] font-medium text-ink transition-colors hover:bg-subtle"
+            >
+              <GithubMark size={14} />
+              Connect GitHub
+            </Link>
+          )}
         </div>
       </div>
     </header>

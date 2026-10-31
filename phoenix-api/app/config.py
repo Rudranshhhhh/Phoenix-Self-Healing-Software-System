@@ -50,8 +50,19 @@ class Config:
         "GITHUB_TOKEN_ENCRYPTION_KEY", SESSION_SECRET_KEY
     )
     PHOENIX_AGENT_TOKEN: str = os.environ.get("PHOENIX_AGENT_TOKEN", "")
-    SESSION_COOKIE_SAMESITE: str = os.environ.get("SESSION_COOKIE_SAMESITE", "lax").lower()
-    SESSION_COOKIE_SECURE: bool = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() in (
+    # Cross-site OAuth (localhost frontend -> HTTPS Render API) requires
+    # SameSite=None and Secure. Local HTTP development keeps Lax/non-secure.
+    _oauth_callback_is_https: bool = os.environ.get(
+        "GITHUB_REDIRECT_URI", ""
+    ).lower().startswith("https://")
+    SESSION_COOKIE_SAMESITE: str = os.environ.get(
+        "SESSION_COOKIE_SAMESITE",
+        "none" if _oauth_callback_is_https else "lax",
+    ).lower()
+    SESSION_COOKIE_SECURE: bool = os.environ.get(
+        "SESSION_COOKIE_SECURE",
+        "true" if _oauth_callback_is_https else "false",
+    ).lower() in (
         "1",
         "true",
         "yes",
