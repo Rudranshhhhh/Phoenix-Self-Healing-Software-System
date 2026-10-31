@@ -7,7 +7,7 @@
 up:
 	@echo "🔥 Starting Phoenix..."
 	docker compose up --build -d
-	@echo "✅ Phoenix is running. Dashboard: http://localhost:3000 | API: http://localhost:5000"
+	@echo "✅ Phoenix is running. Dashboard: http://localhost:3000 | API: http://localhost:8000"
 
 down:
 	@echo "🛑 Stopping Phoenix..."

@@ -27,6 +27,18 @@ class FakeContainer:
         self._stop_after = stop_after
         self._reloads = 0
         self.removed = False
+        self._stats = {
+            "cpu_stats": {
+                "cpu_usage": {"total_usage": 250},
+                "system_cpu_usage": 2000,
+                "online_cpus": 2,
+            },
+            "precpu_stats": {
+                "cpu_usage": {"total_usage": 50},
+                "system_cpu_usage": 1000,
+            },
+            "memory_stats": {"usage": 50, "limit": 100},
+        }
 
     def reload(self):
         self._reloads += 1
@@ -38,6 +50,9 @@ class FakeContainer:
 
     def remove(self, force=False):
         self.removed = True
+
+    def stats(self, stream=False):
+        return self._stats
 
 
 class FakeContainers:
@@ -120,3 +135,14 @@ def test_start_labels_container_and_removes_old_one():
 
 def test_remove_is_silent_when_container_missing():
     DockerRuntime(client=FakeClient(existing=None)).remove("nope")
+
+
+def test_resource_snapshot_reports_cpu_and_memory():
+    container = FakeContainer(status="running")
+    snapshot = DockerRuntime.resource_snapshot(container)
+
+    assert snapshot["container_id"] == "abc123def456"
+    assert snapshot["cpu_percent"] == 40.0
+    assert snapshot["memory_usage_bytes"] == 50
+    assert snapshot["memory_limit_bytes"] == 100
+    assert snapshot["memory_percent"] == 50.0

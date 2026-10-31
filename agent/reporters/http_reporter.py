@@ -53,6 +53,9 @@ def _detect_phoenix_api_url(backend_url: str) -> Optional[str]:
         )
         return phoenix_url
     
+    if ":8000" in backend_url or backend_url.endswith("8000"):
+        return backend_url.rstrip("/")
+
     # Check PHOENIX_API_URL env var (explicit override)
     phoenix_url = os.environ.get("PHOENIX_API_URL")
     if phoenix_url:

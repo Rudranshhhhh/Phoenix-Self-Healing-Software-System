@@ -5,10 +5,17 @@ Proves evidence extraction, classification, and orchestrator structure.
 """
 import sys
 import os
+import inspect
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+os.environ.setdefault("PHOENIX_WEBHOOK_SECRET", "standalone-test-secret")
 
 # Add repo root to path
 repo_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, repo_root)
+sys.path.insert(0, os.path.join(repo_root, "phoenix-api"))
 
 # Change to repo root for relative imports
 os.chdir(repo_root)
@@ -19,7 +26,7 @@ def test_evidence_extraction():
     print("TEST 1: Evidence Extraction (thin adapter to existing LLM engine)")
     print("="*70)
     
-    from phoenix_api.app.evidence import (
+    from app.evidence import (
         extract_evidence_from_ci_payload,
         extract_evidence_from_docker_incident,
     )
@@ -82,7 +89,7 @@ def test_failure_classification():
     print("TEST 2: Failure Classification")
     print("="*70)
     
-    from phoenix_api.app.classifier import FailureClassifier
+    from app.classifier import FailureClassifier
     
     # Code-level errors
     classification, reason = FailureClassifier.classify(
@@ -120,7 +127,7 @@ def test_incident_store_structure():
     print("TEST 3: Incident Store Structure (methods exist)")
     print("="*70)
     
-    from phoenix_api.app.incident_store import IncidentStore
+    from app.incident_store import IncidentStore
     import inspect
     
     methods = [
@@ -150,7 +157,7 @@ def test_orchestrator_structure():
     print("TEST 4: Orchestrator Structure")
     print("="*70)
     
-    from phoenix_api.app.orchestrator import PhoenixOrchestrator
+    from app.orchestrator import PhoenixOrchestrator
     import inspect
     
     orchestrator = PhoenixOrchestrator()
@@ -178,10 +185,10 @@ def test_config_loading():
     try:
         # Need to reload the module since it already loaded
         import importlib
-        import phoenix_api.app.config as config_module
+        import app.config as config_module
         importlib.reload(config_module)
         
-        from phoenix_api.app.config import config
+        from app.config import config
         assert config.PHOENIX_WEBHOOK_SECRET == 'test-secret', "Webhook secret not loaded"
         assert config.MONGO_URI == "mongodb://localhost:27017", "Default MONGO_URI not set"
         assert config.MONGO_DB_NAME == "phoenix", "Default DB name not set"
@@ -206,7 +213,7 @@ def test_no_duplication():
     print("="*70)
     
     # Check that we're using existing EvidenceInput
-    from phoenix_api.app.evidence import extract_evidence_from_ci_payload
+    from app.evidence import extract_evidence_from_ci_payload
     from agent.ai.llm_engine.diagnosis import EvidenceInput
     
     payload = {
@@ -225,7 +232,7 @@ def test_no_duplication():
     print(f"✓ Evidence extraction returns EvidenceInput from {type(result).__module__}")
     
     # Verify we're not duplicating diagnosis, patch, or sandbox
-    import phoenix_api.app.evidence as evidence_module
+    import app.evidence as evidence_module
     source = inspect.getsource(evidence_module)
     assert 'class EvidenceInput' not in source, "evidence.py duplicates EvidenceInput!"
     assert 'class DiagnosisResult' not in source, "evidence.py duplicates DiagnosisResult!"
@@ -241,7 +248,7 @@ def test_schema_validation():
     print("TEST 7: API Schema Validation")
     print("="*70)
     
-    from phoenix_api.app.schemas import (
+    from app.schemas import (
         CIWebhookPayload,
         DockerIncidentPayload,
         IncidentResponse,

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Optional
 
@@ -180,7 +181,7 @@ def generate_diagnosis(
     raw = client.complete(
         user_prompt=prompt,
         system_prompt=SYSTEM_PROMPT,
-        max_tokens=600,
+        max_tokens=int(os.environ.get("GROQ_DIAGNOSIS_MAX_TOKENS", "450")),
         temperature=0.2,
     )
 

@@ -228,7 +228,11 @@ class ValidationResult(BaseModel):
         """
         docker_ok = True
         if self.docker and not self.docker.skipped:
-            docker_ok = self.docker.container_started
+            docker_ok = (
+                self.docker.build_passed
+                and self.docker.container_started
+                and self.docker.health_check_passed
+            )
 
         self.validated = (
             self.build_passed
@@ -251,7 +255,7 @@ class ValidationResult(BaseModel):
             if not self.original_failure_resolved:
                 failures.append("original failure still present")
             if not docker_ok:
-                failures.append("container did not start")
+                failures.append("Docker validation failed")
             self.reason = "Patch rejected — " + ", ".join(failures) + "."
 
         self.completed_at = datetime.now(timezone.utc)

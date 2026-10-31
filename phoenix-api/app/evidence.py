@@ -5,6 +5,8 @@ Thin adapter: convert CI payloads and Docker incidents into EvidenceInput
 for the existing LLM engine.
 """
 import logging
+import pathlib
+import re
 from typing import Optional
 
 from agent.ai.llm_engine.diagnosis import EvidenceInput
@@ -92,6 +94,58 @@ def extract_evidence_from_docker_incident(
     except Exception as exc:
         logger.error("Failed to extract evidence from Docker payload: %s", exc)
         return None
+
+
+def enrich_evidence_from_repository(
+    evidence: EvidenceInput,
+    repo_path: pathlib.Path,
+) -> EvidenceInput:
+    """Resolve traceback locations and attach bounded source context.
+
+    Logs are useful for identifying a failure but are not sufficient for safe
+    patch generation. This helper reads only the referenced source file and a
+    small window around the failing line, keeping prompts compact.
+    """
+    stack_trace = evidence.stack_trace or ""
+    match = None
+    for candidate in re.finditer(r'File ["\']([^"\']+)["\'], line (\d+)', stack_trace):
+        match = candidate
+    if match is None:
+        return evidence
+
+    raw_file = match.group(1).replace("\\", "/")
+    relative_file = raw_file
+    marker = "/workspace/"
+    if marker in relative_file:
+        relative_file = relative_file.split(marker, 1)[1]
+    while relative_file.startswith("./"):
+        relative_file = relative_file[2:]
+    source_file = (repo_path / relative_file).resolve()
+    try:
+        source_file.relative_to(repo_path.resolve())
+    except ValueError:
+        logger.warning("Ignoring traceback path outside repository: %s", raw_file)
+        return evidence
+    if not source_file.is_file():
+        return evidence
+
+    line = int(match.group(2))
+    try:
+        lines = source_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        logger.warning("Could not read evidence source %s: %s", source_file, exc)
+        return evidence
+
+    start = max(0, line - 8)
+    end = min(len(lines), line + 7)
+    snippet = "\n".join(lines[start:end])
+    return evidence.model_copy(
+        update={
+            "file": source_file.relative_to(repo_path.resolve()).as_posix(),
+            "line": line,
+            "relevant_code": snippet,
+        }
+    )
 
 
 # ============================================================================ #

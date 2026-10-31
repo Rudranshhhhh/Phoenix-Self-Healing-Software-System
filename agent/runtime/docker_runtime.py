@@ -88,6 +88,44 @@ class DockerRuntime:
             image_tag, name=name, detach=True, labels={PHOENIX_LABEL: "true"}
         )
 
+    @staticmethod
+    def resource_snapshot(container: Any) -> dict[str, Any]:
+        """Return a stable CPU/memory snapshot for a managed container."""
+        stats = container.stats(stream=False)
+        memory = stats.get("memory_stats", {})
+        usage = int(memory.get("usage", 0) or 0)
+        limit = int(memory.get("limit", 0) or 0)
+        cpu = DockerRuntime._cpu_percent(stats)
+        return {
+            "container_id": container.id,
+            "container_name": getattr(container, "name", ""),
+            "status": getattr(container, "status", "unknown"),
+            "cpu_percent": cpu,
+            "memory_usage_bytes": usage,
+            "memory_limit_bytes": limit,
+            "memory_percent": (usage / limit * 100.0) if limit else 0.0,
+        }
+
+    @staticmethod
+    def _cpu_percent(stats: dict[str, Any]) -> float:
+        """Calculate Docker's CPU percentage from two consecutive counters."""
+        cpu_stats = stats.get("cpu_stats", {})
+        previous = stats.get("precpu_stats", {})
+        cpu_delta = (
+            cpu_stats.get("cpu_usage", {}).get("total_usage", 0)
+            - previous.get("cpu_usage", {}).get("total_usage", 0)
+        )
+        system_delta = (
+            cpu_stats.get("system_cpu_usage", 0)
+            - previous.get("system_cpu_usage", 0)
+        )
+        if cpu_delta <= 0 or system_delta <= 0:
+            return 0.0
+        online_cpus = cpu_stats.get("online_cpus")
+        if not online_cpus:
+            online_cpus = len(cpu_stats.get("cpu_usage", {}).get("percpu_usage", []) or [1])
+        return round((cpu_delta / system_delta) * online_cpus * 100.0, 2)
+
     def wait_for_exit(self, container: Any, timeout: float = 60.0, poll: float = 1.0) -> bool:
         """Poll until the container stops. False if it is still running at timeout."""
         deadline = time.monotonic() + timeout

@@ -1,4 +1,9 @@
-import type { Incident, IncidentListResponse } from "../types/incident";
+import type {
+  Incident,
+  IncidentListResponse,
+  IncidentStatus,
+  IncidentSummary,
+} from "../types/incident";
 import type { GithubUser } from "../types/phoenix";
 
 // ---------------------------------------------------------------------------
@@ -37,11 +42,158 @@ async function deleteJson<T>(path: string): Promise<T> {
 // ---------------------------------------------------------------------------
 
 export function getIncidents(signal?: AbortSignal): Promise<IncidentListResponse> {
-  return getJson("/api/incidents?page_size=100", signal);
+  return getJson<IncidentWireList>("/api/incidents?page_size=100", signal).then((response) => ({
+    items: response.items ?? response.incidents.map(toSummary),
+    total: response.total,
+    page: response.page,
+    page_size: response.page_size,
+  }));
 }
 
 export function getIncident(id: string, signal?: AbortSignal): Promise<Incident> {
-  return getJson(`/api/incidents/${encodeURIComponent(id)}`, signal);
+  return getJson<Incident | IncidentWire>(`/api/incidents/${encodeURIComponent(id)}`, signal).then(
+    (incident) => ("incident_id" in incident ? toIncident(incident) : incident),
+  );
+}
+
+type IncidentWire = {
+  incident_id: string;
+  source: "github_ci" | "docker_runtime";
+  repository: string;
+  status: string;
+  payload?: Record<string, unknown>;
+  evidence?: Record<string, unknown> | null;
+  diagnosis?: Record<string, unknown> | null;
+  patch?: Record<string, unknown> | null;
+  validation_result?: Record<string, unknown> | null;
+  git_branch?: string | null;
+  pr_url?: string | null;
+  pr_number?: number | null;
+  created_at: string;
+  updated_at: string;
+  timeline?: Array<{ status: string; timestamp: string; message?: string }>;
+  error_reason?: string | null;
+};
+
+type IncidentWireList = {
+  incidents: IncidentWire[];
+  items?: IncidentSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+function statusForUi(status: string): IncidentStatus {
+  if (
+    status === "detected" ||
+    status === "diagnosing" ||
+    status === "fix_proposed" ||
+    status === "validating" ||
+    status === "validated" ||
+    status === "rejected" ||
+    status === "pr_opened"
+  ) {
+    return status;
+  }
+  return "rejected";
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function toSummary(incident: IncidentWire): IncidentSummary {
+  const payload = incident.payload ?? {};
+  const evidence = incident.evidence ?? {};
+  const validation = incident.validation_result;
+  return {
+    id: incident.incident_id,
+    repo: incident.repository,
+    status: statusForUi(incident.status),
+    exception_type: stringValue(payload.error_type) || stringValue(evidence.error_type) || "Failure",
+    message: stringValue(payload.error_message) || incident.error_reason || "Incident detected",
+    source_type: incident.source === "github_ci" ? "github_actions" : "docker_runtime",
+    validation_result:
+      validation?.validated === true ? "PASS" : validation?.validated === false ? "FAIL" : null,
+    pr_url: incident.pr_url ?? null,
+    created_at: incident.created_at,
+    updated_at: incident.updated_at,
+  };
+}
+
+function toIncident(incident: IncidentWire): Incident {
+  const payload = incident.payload ?? {};
+  const evidence = incident.evidence ?? {};
+  const diagnosis = incident.diagnosis;
+  const patch = incident.patch;
+  const validation = incident.validation_result;
+  const summary = toSummary(incident);
+  const stackTrace = stringValue(payload.stack_trace) || stringValue(evidence.stack_trace);
+
+  return {
+    ...summary,
+    source: {
+      type: summary.source_type,
+      workflow_run_url: stringValue(payload.run_url) || null,
+      container: stringValue(payload.container_name) || null,
+      commit_sha: stringValue(payload.commit) || null,
+    },
+    error: {
+      exception_type: summary.exception_type,
+      message: summary.message,
+      stack_trace: stackTrace,
+      frames: [],
+    },
+    diagnosis: diagnosis
+      ? {
+          root_cause: stringValue(diagnosis.root_cause),
+          explanation: stringValue(diagnosis.explanation),
+          suspect_file: stringValue(diagnosis.affected_file) || null,
+          suspect_line: typeof diagnosis.affected_line === "number" ? diagnosis.affected_line : null,
+          confidence: typeof diagnosis.confidence === "number" ? diagnosis.confidence : null,
+          context_files: [],
+        }
+      : null,
+    patch: patch
+      ? {
+          summary: stringValue(patch.explanation),
+          diff: stringValue(patch.diff),
+          files_changed: Array.isArray(patch.patches)
+            ? patch.patches
+                .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+                .map((item) => stringValue(item.file))
+                .filter(Boolean)
+            : [],
+        }
+      : null,
+    validation: validation
+      ? {
+          result: validation.validated === true ? "PASS" : "FAIL",
+          tests_run: typeof validation.tests_run === "number" ? validation.tests_run : null,
+          tests_passed: typeof validation.tests_passed === "number" ? validation.tests_passed : null,
+          bug_reproduced_before_patch: null,
+          bug_reproduces_after_patch: validation.original_failure_resolved === false,
+          duration_seconds:
+            typeof validation.duration_seconds === "number" ? validation.duration_seconds : 0,
+          output: stringValue(validation.test_stdout) || stringValue(validation.test_stderr),
+          rejection_reason: validation.validated === false ? incident.error_reason ?? null : null,
+          finished_at: stringValue(validation.completed_at) || incident.updated_at,
+        }
+      : null,
+    pull_request: incident.pr_url
+      ? {
+          number: incident.pr_number ?? null,
+          url: incident.pr_url,
+          branch: incident.git_branch ?? "",
+          state: "open",
+        }
+      : null,
+    timeline: (incident.timeline ?? []).map((event) => ({
+      status: statusForUi(event.status),
+      at: event.timestamp,
+      message: event.message ?? null,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

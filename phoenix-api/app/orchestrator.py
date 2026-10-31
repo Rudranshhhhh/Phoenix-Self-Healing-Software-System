@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from .classifier import FailureClassifier
 from .config import config
 from .evidence import (
+    enrich_evidence_from_repository,
     extract_evidence_from_ci_payload,
     extract_evidence_from_docker_incident,
 )
@@ -116,6 +117,13 @@ class PhoenixOrchestrator:
                 )
                 return incident
 
+            repo_path = pathlib.Path(config.PHOENIX_REPO_PATH).resolve()
+            if not repo_path.exists():
+                raise RuntimeError(
+                    f"Repository not found at {repo_path}. "
+                    f"Set PHOENIX_REPO_PATH to a valid local clone."
+                )
+
             # Step 2: Extract evidence
             logger.info("%s — extracting evidence", incident_id)
             IncidentStore.update_incident_status(
@@ -131,6 +139,13 @@ class PhoenixOrchestrator:
 
             if not evidence:
                 raise RuntimeError("Evidence extraction failed")
+            evidence = enrich_evidence_from_repository(evidence, repo_path)
+            IncidentStore.update_incident_status(
+                incident_id,
+                "diagnosing",
+                message="Evidence collected",
+                evidence=evidence.model_dump(),
+            )
 
             # Step 3: LLM diagnosis + patch generation
             logger.info("%s — running LLM engine", incident_id)
@@ -152,6 +167,16 @@ class PhoenixOrchestrator:
                 )
                 return IncidentStore.get_incident(incident_id)
 
+            IncidentStore.update_incident_status(
+                incident_id,
+                "diagnosing",
+                message="Diagnosis complete",
+                diagnosis=llm_result.diagnosis.model_dump()
+                if llm_result.diagnosis
+                else None,
+                patch=llm_result.patch.model_dump(),
+            )
+
             logger.info(
                 "%s — patch generated with %d file(s)",
                 incident_id,
@@ -168,15 +193,15 @@ class PhoenixOrchestrator:
             )
 
             # Get the repository path (must be a local clone)
-            repo_path = pathlib.Path(config.PHOENIX_REPO_PATH).resolve()
-            if not repo_path.exists():
-                raise RuntimeError(
-                    f"Repository not found at {repo_path}. "
-                    f"Set PHOENIX_REPO_PATH to a valid local clone."
-                )
-
             # Ensure the repo is checked out to the failing commit
-            self._checkout_commit(repo_path, incident["commit"])
+            commit = incident.get("commit", "")
+            if self._is_checkoutable_commit(commit):
+                self._checkout_commit(repo_path, commit)
+            else:
+                logger.info(
+                    "%s — no checkoutable commit supplied; using the repository's current HEAD",
+                    incident_id,
+                )
 
             # Run sandbox
             sandbox_pipeline = self._get_sandbox_pipeline()
@@ -244,6 +269,13 @@ class PhoenixOrchestrator:
                 str(exc),
             )
             return IncidentStore.get_incident(incident_id)
+
+    @staticmethod
+    def _is_checkoutable_commit(commit_sha: str) -> bool:
+        """Return whether an incident commit can safely be passed to git."""
+        if not commit_sha:
+            return False
+        return commit_sha.lower() not in {"unknown", "none", "null", "latest"}
 
     @staticmethod
     def _checkout_commit(repo_path: pathlib.Path, commit_sha: str) -> None:

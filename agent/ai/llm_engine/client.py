@@ -53,10 +53,10 @@ class GroqLLMClient:
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        max_tokens: int = 1500,
+        max_tokens: int = 900,
         temperature: float = 0.2,
-        max_retries: int = 2,
-        retry_delay_seconds: float = 3.0,
+        max_retries: int = 1,
+        retry_delay_seconds: float = 2.0,
     ) -> None:
         """
         Args:
@@ -76,10 +76,12 @@ class GroqLLMClient:
             )
 
         self._model = model or os.environ.get("GROQ_MODEL", DEFAULT_MODEL)
-        self._max_tokens = max_tokens
-        self._temperature = temperature
-        self._max_retries = max_retries
-        self._retry_delay = retry_delay_seconds
+        self._max_tokens = int(os.environ.get("GROQ_MAX_OUTPUT_TOKENS", str(max_tokens)))
+        self._temperature = float(os.environ.get("GROQ_TEMPERATURE", str(temperature)))
+        self._max_retries = int(os.environ.get("GROQ_MAX_RETRIES", str(max_retries)))
+        self._retry_delay = float(
+            os.environ.get("GROQ_RETRY_DELAY_SECONDS", str(retry_delay_seconds))
+        )
 
         # Initialise the OpenAI-compatible client pointing at Groq
         self._client = OpenAI(

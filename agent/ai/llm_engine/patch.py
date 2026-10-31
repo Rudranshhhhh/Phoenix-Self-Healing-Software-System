@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Optional
 
@@ -278,7 +279,7 @@ def generate_patch(
     raw = client.complete(
         user_prompt=prompt,
         system_prompt=SYSTEM_PROMPT,
-        max_tokens=1200,  # multi-file patches need more room than single-file did
+        max_tokens=int(os.environ.get("GROQ_PATCH_MAX_TOKENS", "900")),
         temperature=0.1,  # Lower temperature for deterministic code output
     )
 

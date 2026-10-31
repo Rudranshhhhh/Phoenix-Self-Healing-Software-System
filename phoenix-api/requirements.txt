@@ -17,7 +17,7 @@ python-dotenv==1.0.1
 
 # HTTP client (sync + async)
 requests==2.31.0
-httpx==0.28.1
+httpx<0.28
 
 # Session signing (GitHub OAuth cookie)
 itsdangerous==2.2.0

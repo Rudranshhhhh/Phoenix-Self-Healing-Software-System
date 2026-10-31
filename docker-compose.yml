@@ -19,7 +19,8 @@ services:
   # Phoenix API Orchestrator (real, not mocked) — port 8000
   phoenix-api:
     build:
-      context: ./phoenix-api
+      context: .
+      dockerfile: phoenix-api/Dockerfile
     ports:
       - "8000:8000"
     depends_on:
@@ -45,7 +46,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - phoenix-net
-    command: uvicorn phoenix_api.app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --app-dir /app/phoenix-api --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Phoenix Frontend (Vite) — port 3000
   phoenix-frontend:
@@ -54,7 +60,8 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - phoenix-api
+      phoenix-api:
+        condition: service_healthy
     networks:
       - phoenix-net
     environment:

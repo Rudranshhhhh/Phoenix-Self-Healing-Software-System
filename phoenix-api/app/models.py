@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 IncidentStatus = Literal[
     "detected", "diagnosing", "fix_proposed", "validating",
@@ -107,3 +107,4 @@ class IncidentListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    incidents: list[dict] = Field(default_factory=list)

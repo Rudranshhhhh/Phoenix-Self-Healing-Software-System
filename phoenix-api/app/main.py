@@ -11,7 +11,10 @@ from pydantic import BaseModel, ValidationError
 from app.fixtures import SERVER_STARTED, STATIC_INCIDENTS, live_incident
 from app.ingest import IngestEvent, demo_fixtures_enabled, store
 from app.models import Incident, IncidentListResponse, IncidentSummary
+from app.database import close_database, init_database
 from app.routers.github import router as github_router
+from app.routers.incidents import create_incident
+from app.incident_store import IncidentStore
 
 app = FastAPI(title="Phoenix API", version="0.1.0")
 
@@ -25,6 +28,21 @@ app.add_middleware(
 
 # Mount the GitHub OAuth + repo-read router
 app.include_router(github_router)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    if not init_database():
+        # Keep health and fixture routes available while MongoDB is starting;
+        # incident intake will surface a storage error until it is ready.
+        import logging
+
+        logging.getLogger(__name__).warning("MongoDB is unavailable; incident persistence is offline")
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    close_database()
 
 
 class HealthResponse(BaseModel):
@@ -70,12 +88,19 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/health")
+def legacy_health() -> dict[str, str]:
+    return {"status": "healthy"}
+
+
 @app.get("/api/incidents", response_model=IncidentListResponse)
 def list_incidents(
     status: str | None = Query(None, description="Comma-separated statuses, e.g. validated,pr_opened"),
     repo: str | None = Query(None, description="owner/name"),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=100),
+    skip: int | None = Query(None, ge=0),
+    limit: int | None = Query(None, ge=1, le=100),
 ) -> IncidentListResponse:
     incidents = current_incidents()
     if status:
@@ -85,21 +110,38 @@ def list_incidents(
         incidents = [i for i in incidents if i.repo == repo]
     incidents.sort(key=lambda i: i.updated_at, reverse=True)
 
+    mongo_incidents: list[dict] = []
+    try:
+        mongo_incidents, mongo_total = IncidentStore.list_incidents(
+            skip=skip if skip is not None else (page - 1) * page_size,
+            limit=limit if limit is not None else page_size,
+            status=status if status and "," not in status else None,
+            source=None,
+        )
+        for incident in mongo_incidents:
+            incident.pop("_id", None)
+    except RuntimeError:
+        mongo_total = 0
+
     start = (page - 1) * page_size
     return IncidentListResponse(
         items=[summarize(i) for i in incidents[start : start + page_size]],
-        total=len(incidents),
-        page=page,
-        page_size=page_size,
+        total=mongo_total if mongo_incidents else len(incidents),
+        page=(skip // (limit or page_size)) if skip is not None else page,
+        page_size=limit or page_size,
+        incidents=mongo_incidents,
     )
 
 
-@app.get(
-    "/api/incidents/{incident_id}",
-    response_model=Incident,
-    responses={404: {"model": ErrorResponse}},
-)
-def get_incident(incident_id: str) -> Incident:
+@app.get("/api/incidents/{incident_id}", responses={404: {"model": ErrorResponse}})
+def get_incident(incident_id: str) -> Incident | dict:
+    try:
+        mongo_incident = IncidentStore.get_incident(incident_id)
+    except RuntimeError:
+        mongo_incident = None
+    if mongo_incident:
+        mongo_incident.pop("_id", None)
+        return mongo_incident
     for incident in current_incidents():
         if incident.id == incident_id:
             return incident
@@ -115,3 +157,11 @@ def ingest_event(event: IngestEvent, x_phoenix_token: Optional[str] = Header(def
         return store.apply(event)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+app.add_api_route(
+    "/api/incidents",
+    create_incident,
+    methods=["POST"],
+    status_code=202,
+)
