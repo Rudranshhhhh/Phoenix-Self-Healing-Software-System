@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
 from agent.ai.llm_engine import LLMEngine
 from agent.sandbox import SandboxPipeline
@@ -24,6 +25,19 @@ if str(_API_SOURCE) not in sys.path:
 
 class AgentWorker:
     def __init__(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        load_dotenv(project_root / ".env")
+        missing = [
+            name
+            for name in ("PHOENIX_API_URL", "PHOENIX_AGENT_TOKEN")
+            if not os.environ.get(name)
+        ]
+        if missing:
+            names = ", ".join(missing)
+            raise RuntimeError(
+                f"Missing required agent configuration: {names}. "
+                f"Set them in {project_root / '.env'} or this terminal."
+            )
         self.api_url = os.environ["PHOENIX_API_URL"].rstrip("/")
         self.agent_token = os.environ["PHOENIX_AGENT_TOKEN"]
         self.worker_id = os.environ.get("PHOENIX_AGENT_ID", f"worker-{uuid.uuid4().hex[:8]}")

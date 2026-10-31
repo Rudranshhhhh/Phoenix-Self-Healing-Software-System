@@ -7,11 +7,18 @@ The local Phoenix Agent claims the job and uses Docker Desktop on the local
 machine; Render never needs access to the Docker socket.
 
 Start the worker from the repository root after setting the deployed API URL
-and the matching agent token:
+and the matching agent token. The worker automatically loads these values
+from the root `.env` file:
 
 ```powershell
 $env:PHOENIX_API_URL="https://phoenix-api-v89i.onrender.com"
 $env:PHOENIX_AGENT_TOKEN="<agent-token>"
+python -m agent.worker.poller
+```
+
+Alternatively, put the two values in `.env` and run only:
+
+```powershell
 python -m agent.worker.poller
 ```
 
