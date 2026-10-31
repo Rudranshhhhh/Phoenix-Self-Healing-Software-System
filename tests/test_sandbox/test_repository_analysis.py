@@ -12,7 +12,7 @@ def test_generated_node_dockerfile_uses_vite_dev_server(tmp_path):
     dockerfile = _generated_dockerfile(tmp_path)
 
     assert "FROM node:20-alpine" in dockerfile
-    assert 'npm", "run", "dev"' in dockerfile
+    assert "npm run dev" in dockerfile
     assert "--host" in dockerfile
     assert "EXPOSE 5173" in dockerfile
 
@@ -25,8 +25,33 @@ def test_generated_node_start_script_binds_vite_to_container(tmp_path):
 
     dockerfile = _generated_dockerfile(tmp_path)
 
-    assert 'npm", "start", "--", "--host", "0.0.0.0", "--port", "5173"' in dockerfile
+    assert "npm start -- --host 0.0.0.0 --port 5173" in dockerfile
     assert "EXPOSE 5173" in dockerfile
+
+
+def test_generated_node_start_script_preserves_port_3000(tmp_path):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"start": "vite --port 3000"}}),
+        encoding="utf-8",
+    )
+
+    dockerfile = _generated_dockerfile(tmp_path)
+
+    assert "EXPOSE 3000" in dockerfile
+    assert "--port 5173" not in dockerfile
+    assert "--host 0.0.0.0" in dockerfile
+
+
+def test_generated_next_start_binds_externally(tmp_path):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"start": "next start -p 3000"}}),
+        encoding="utf-8",
+    )
+
+    dockerfile = _generated_dockerfile(tmp_path)
+
+    assert "EXPOSE 3000" in dockerfile
+    assert "--hostname 0.0.0.0" in dockerfile
 
 
 def test_generated_python_dockerfile_uses_pyproject(tmp_path):

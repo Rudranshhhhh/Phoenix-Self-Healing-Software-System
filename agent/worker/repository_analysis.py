@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
+import re
 import subprocess
 import time
 import uuid
@@ -14,6 +15,14 @@ import requests
 from agent.sandbox.project_detector import detect_project
 
 logger = logging.getLogger(__name__)
+
+
+def _script_port(script: str) -> int | None:
+    match = re.search(r"(?:--port|-p)\s*=?\s*(\d{2,5})", script)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"\bPORT\s*=\s*(\d{2,5})\b", script, re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 def _generated_dockerfile(root: pathlib.Path) -> str:
@@ -29,17 +38,25 @@ def _generated_dockerfile(root: pathlib.Path) -> str:
         scripts = package.get("scripts", {}) if isinstance(package, dict) else {}
         start_script = str(scripts.get("start", ""))
         if "start" in scripts and "vite" in start_script:
-            command = 'CMD ["npm", "start", "--", "--host", "0.0.0.0", "--port", "5173"]'
-            port = 5173
+            port = _script_port(start_script) or 5173
+            suffix = "" if _script_port(start_script) else f' --port {port}'
+            command = f'CMD ["sh", "-c", "npm start -- --host 0.0.0.0{suffix}"]'
         elif "start" in scripts:
-            command = 'CMD ["npm", "start"]'
-            port = 3000
+            port = _script_port(start_script) or 3000
+            if "next" in start_script and "--hostname" not in start_script and " -H " not in f" {start_script} ":
+                command = f'CMD ["sh", "-c", "npm start -- --hostname 0.0.0.0"]'
+            else:
+                command = 'CMD ["npm", "start"]'
         elif "dev" in scripts:
-            command = 'CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]'
-            port = 5173
+            dev_script = str(scripts["dev"])
+            port = _script_port(dev_script) or 5173
+            suffix = "" if _script_port(dev_script) else f' --port {port}'
+            command = f'CMD ["sh", "-c", "npm run dev -- --host 0.0.0.0{suffix}"]'
         elif "preview" in scripts:
-            command = 'CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173"]'
-            port = 4173
+            preview_script = str(scripts["preview"])
+            port = _script_port(preview_script) or 4173
+            suffix = "" if _script_port(preview_script) else f' --port {port}'
+            command = f'CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0{suffix}"]'
         else:
             command = 'CMD ["npm", "run", "start"]'
             port = 3000
