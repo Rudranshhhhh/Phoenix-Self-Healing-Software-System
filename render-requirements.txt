@@ -1,0 +1,25 @@
+# Render control-plane dependencies.
+#
+# This is intentionally separate from agent/requirements.txt: Render runs the
+# FastAPI control plane, while the Docker-capable worker runs elsewhere.
+
+# FastAPI API
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pymongo==4.7.3
+python-dotenv==1.0.1
+itsdangerous==2.2.0
+cryptography==42.0.8
+pydantic==2.7.4
+
+# OAuth, GitHub recovery, and LLM modules imported by the API/worker path
+httpx==0.27.2
+requests==2.32.3
+urllib3==2.2.2
+openai==1.35.14
+gitpython==3.1.43
+PyGithub==2.3.0
+pydantic-settings==2.3.4
+
+# Imported by the sandbox validator even when Docker execution is disabled on Render
+docker==7.1.0
