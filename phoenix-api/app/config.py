@@ -45,6 +45,11 @@ class Config:
     )
     # Secret used to sign session cookies.  Generate with: openssl rand -hex 32
     SESSION_SECRET_KEY: str = os.environ.get("SESSION_SECRET_KEY", "change-me-in-production")
+    FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    GITHUB_TOKEN_ENCRYPTION_KEY: str = os.environ.get(
+        "GITHUB_TOKEN_ENCRYPTION_KEY", SESSION_SECRET_KEY
+    )
+    PHOENIX_AGENT_TOKEN: str = os.environ.get("PHOENIX_AGENT_TOKEN", "")
 
     # Git author identity (for commits)
     PHOENIX_GIT_AUTHOR_NAME: str = os.environ.get(
@@ -56,7 +61,7 @@ class Config:
 
     # Sandbox / validation
     PHOENIX_MAX_ATTEMPTS: int = int(os.environ.get("PHOENIX_MAX_ATTEMPTS", "2"))
-    SANDBOX_RUN_DOCKER: bool = os.environ.get("SANDBOX_RUN_DOCKER", "true").lower() in (
+    SANDBOX_RUN_DOCKER: bool = os.environ.get("SANDBOX_RUN_DOCKER", "false").lower() in (
         "1",
         "true",
         "yes",

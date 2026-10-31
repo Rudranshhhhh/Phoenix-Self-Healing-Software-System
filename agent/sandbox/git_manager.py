@@ -173,11 +173,19 @@ def create_branch_and_commit(
                 error="No remote found — branch was created locally but not pushed.",
             )
 
+        remote = repo.remotes[remote_name]
         push_url = _build_push_url(remote_url, git_username, git_token)
-        push_info = repo.remotes[remote_name].push(
-            refspec=f"{branch_name}:{branch_name}",
-            force=False,
-        )
+        original_url = remote.url
+        try:
+            if push_url != remote_url:
+                remote.set_url(push_url)
+            push_info = remote.push(
+                refspec=f"{branch_name}:{branch_name}",
+                force=False,
+            )
+        finally:
+            if push_url != remote_url:
+                remote.set_url(original_url)
 
         # Check push result
         for info in push_info:

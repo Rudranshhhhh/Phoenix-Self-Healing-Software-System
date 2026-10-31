@@ -79,6 +79,13 @@ def _create_collections_and_indexes(db):
         [("repository", 1), ("commit", 1), ("run_id", 1)],
         sparse=True,  # sparse because Docker incidents may not have run_id
     )
+    db.incidents.create_index([("status", 1), ("lease_expires_at", 1)])
+    if "repository_connections" not in db.list_collection_names():
+        db.create_collection("repository_connections")
+    db.repository_connections.create_index(
+        [("github_login", 1), ("full_name", 1)], unique=True
+    )
+    db.repository_connections.create_index("full_name")
     logger.info("✓ Created incidents collection with indexes")
 
     logger.info("✓ Database initialization complete")

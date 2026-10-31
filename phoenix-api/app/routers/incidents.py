@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, st
 
 from ..config import config
 from ..incident_store import IncidentStore
+from ..repository_store import RepositoryStore
 from ..orchestrator import PhoenixOrchestrator
 from ..schemas import (
     CIWebhookPayload,
@@ -128,6 +129,7 @@ async def create_incident(
     # 5. Generate incident ID
     incident_id = IncidentStore.generate_incident_id()
     logger.info("Created incident %s", incident_id)
+    connection = RepositoryStore.get_for_repository(repository)
 
     # 6. Store incident
     try:
@@ -139,6 +141,7 @@ async def create_incident(
             branch=branch,
             payload=payload,
             run_id=run_id,
+            connected_github_login=connection.get("github_login") if connection else None,
         )
     except Exception as exc:
         logger.error("Failed to create incident: %s", exc)
@@ -148,7 +151,14 @@ async def create_incident(
         )
 
     # 7. Start background pipeline
-    background_tasks.add_task(orchestrator.process_incident, incident_id)
+    if connection:
+        IncidentStore.update_incident_status(
+            incident_id,
+            "queued_for_agent",
+            message="Queued for the connected Phoenix agent",
+        )
+    else:
+        background_tasks.add_task(orchestrator.process_incident, incident_id)
 
     return IncidentResponse(
         incident_id=incident_id,

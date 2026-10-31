@@ -57,6 +57,7 @@ from fastapi import APIRouter, Body, Cookie, HTTPException, Query
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import config
+from ..repository_store import RepositoryStore
 from ..session_store import COOKIE_NAME, SESSION_MAX_AGE, oauth_states, sessions
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ GITHUB_API_BASE = "https://api.github.com"
 OAUTH_SCOPES = "repo,read:user"
 
 # Where the frontend expects to land after a successful OAuth round-trip.
-FRONTEND_CALLBACK = "http://localhost:3000/connect/callback"
+FRONTEND_CALLBACK = f"{config.FRONTEND_URL}/connect/callback"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -251,8 +252,10 @@ async def get_selection(
     phoenix_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ) -> JSONResponse:
     """Return the repository currently connected to this user session."""
-    _get_github_token(phoenix_session)
-    return JSONResponse({"repository": sessions.get_selected_repo(phoenix_session)})
+    token = _get_github_token(phoenix_session)
+    profile = await _github_get("/user", token)
+    selected = RepositoryStore.get_for_user(profile.get("login"))
+    return JSONResponse({"repository": selected})
 
 
 @router.put("/selection")
@@ -261,7 +264,7 @@ async def set_selection(
     phoenix_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ) -> JSONResponse:
     """Persist the repository whose incidents should appear in the dashboard."""
-    _get_github_token(phoenix_session)
+    token = _get_github_token(phoenix_session)
     required = ("id", "owner", "name", "fullName", "defaultBranch")
     if any(not repository.get(field) for field in required):
         raise HTTPException(
@@ -275,9 +278,15 @@ async def set_selection(
         "fullName": repository["fullName"],
         "defaultBranch": repository["defaultBranch"],
     }
-    if not sessions.set_selected_repo(phoenix_session, selected):
-        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
-    return JSONResponse({"repository": selected})
+    remote = await _github_get(
+        f"/repos/{selected['owner']}/{selected['name']}",
+        token,
+    )
+    selected["defaultBranch"] = remote.get("default_branch", selected["defaultBranch"])
+    profile = await _github_get("/user", token)
+    connected = RepositoryStore.upsert(profile.get("login", ""), selected, token)
+    sessions.set_selected_repo(phoenix_session, connected)
+    return JSONResponse({"repository": connected})
 
 
 # ---------------------------------------------------------------------------

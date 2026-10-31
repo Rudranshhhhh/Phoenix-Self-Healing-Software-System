@@ -98,6 +98,12 @@ type IncidentWireList = {
 };
 
 function statusForUi(status: string): IncidentStatus {
+  if (status === "queued_for_agent" || status === "agent_processing") {
+    return "diagnosing";
+  }
+  if (status === "agent_failed") {
+    return "rejected";
+  }
   if (
     status === "detected" ||
     status === "diagnosing" ||

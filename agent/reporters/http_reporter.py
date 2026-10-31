@@ -44,6 +44,11 @@ def _detect_phoenix_api_url(backend_url: str) -> Optional[str]:
     If so, return the Phoenix API URL (port 8000).
     Otherwise, return None (backend_url is already Phoenix API or explicit).
     """
+    explicit_url = os.environ.get("PHOENIX_API_URL")
+    if explicit_url:
+        logger.info("HTTPReporter: using PHOENIX_API_URL from environment: %s", explicit_url)
+        return explicit_url.rstrip("/")
+
     if ":5000" in backend_url or backend_url.endswith("5000"):
         # Legacy Flask backend — convert to Phoenix API
         phoenix_url = backend_url.replace(":5000", ":8000").replace("/5000", "/8000")
@@ -56,12 +61,6 @@ def _detect_phoenix_api_url(backend_url: str) -> Optional[str]:
     if ":8000" in backend_url or backend_url.endswith("8000"):
         return backend_url.rstrip("/")
 
-    # Check PHOENIX_API_URL env var (explicit override)
-    phoenix_url = os.environ.get("PHOENIX_API_URL")
-    if phoenix_url:
-        logger.info("HTTPReporter: using PHOENIX_API_URL from environment: %s", phoenix_url)
-        return phoenix_url
-    
     return None
 
 

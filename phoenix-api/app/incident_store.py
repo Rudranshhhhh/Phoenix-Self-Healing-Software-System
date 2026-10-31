@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from .database import get_database
@@ -62,6 +63,7 @@ class IncidentStore:
         branch: str,
         payload: Dict[str, Any],
         run_id: Optional[str] = None,
+        connected_github_login: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create and store a new incident.
@@ -76,6 +78,7 @@ class IncidentStore:
             "commit": commit,
             "branch": branch,
             "run_id": run_id,  # top-level for dedup index
+            "connected_github_login": connected_github_login,
             "status": "detected",
             "payload": payload,
             "created_at": now,
@@ -238,4 +241,82 @@ class IncidentStore:
         db = get_database()
         return IncidentStore.update_incident_status(
             incident_id, status, message=reason, error_reason=reason
+        )
+
+    @staticmethod
+    def claim_next_agent_job(worker_id: str, lease_seconds: int) -> Optional[Dict[str, Any]]:
+        """Atomically claim the oldest queued or expired agent job."""
+        db = get_database()
+        now = datetime.now(timezone.utc)
+        from datetime import timedelta
+
+        lease_expires = now + timedelta(seconds=lease_seconds)
+        return db.incidents.find_one_and_update(
+            {
+                "status": {"$in": ["queued_for_agent", "agent_processing"]},
+                "$or": [
+                    {"status": "queued_for_agent"},
+                    {"lease_expires_at": {"$lt": now}},
+                ],
+            },
+            {
+                "$set": {
+                    "status": "agent_processing",
+                    "agent_worker_id": worker_id,
+                    "lease_expires_at": lease_expires,
+                    "updated_at": now,
+                },
+                "$inc": {"agent_attempts": 1},
+            },
+            sort=[("created_at", 1)],
+            return_document=ReturnDocument.AFTER,
+        )
+
+    @staticmethod
+    def update_agent_result(
+        incident_id: str,
+        worker_id: str,
+        status: str,
+        result: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Persist a worker result only for the worker holding the lease."""
+        db = get_database()
+        now = datetime.now(timezone.utc)
+        fields: Dict[str, Any] = {
+            "status": status,
+            "agent_result": result,
+            "updated_at": now,
+            "lease_expires_at": None,
+        }
+        if result.get("validation") is not None:
+            fields["validation_result"] = result["validation"]
+        for key in ("evidence", "diagnosis", "patch"):
+            if result.get(key) is not None:
+                fields[key] = result[key]
+        git = result.get("git") or {}
+        if git.get("branch_name"):
+            fields["git_branch"] = git["branch_name"]
+        if git.get("commit_sha"):
+            fields["git_commit_sha"] = git["commit_sha"]
+        pull_request = result.get("pull_request") or {}
+        if pull_request.get("pr_url"):
+            fields["pr_url"] = pull_request["pr_url"]
+            fields["pr_number"] = pull_request.get("pr_number")
+        return db.incidents.find_one_and_update(
+            {
+                "incident_id": incident_id,
+                "status": "agent_processing",
+                "agent_worker_id": worker_id,
+            },
+            {
+                "$set": fields,
+                "$push": {
+                    "timeline": {
+                        "status": status,
+                        "timestamp": now.isoformat(),
+                        "message": result.get("message", "Agent result received"),
+                    }
+                },
+            },
+            return_document=ReturnDocument.AFTER,
         )
