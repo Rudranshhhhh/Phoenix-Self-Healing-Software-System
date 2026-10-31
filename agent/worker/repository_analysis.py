@@ -27,7 +27,11 @@ def _generated_dockerfile(root: pathlib.Path) -> str:
             except (OSError, ValueError):
                 package = {}
         scripts = package.get("scripts", {}) if isinstance(package, dict) else {}
-        if "start" in scripts:
+        start_script = str(scripts.get("start", ""))
+        if "start" in scripts and "vite" in start_script:
+            command = 'CMD ["npm", "start", "--", "--host", "0.0.0.0", "--port", "5173"]'
+            port = 5173
+        elif "start" in scripts:
             command = 'CMD ["npm", "start"]'
             port = 3000
         elif "dev" in scripts:

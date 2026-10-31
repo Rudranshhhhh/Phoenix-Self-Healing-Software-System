@@ -17,6 +17,18 @@ def test_generated_node_dockerfile_uses_vite_dev_server(tmp_path):
     assert "EXPOSE 5173" in dockerfile
 
 
+def test_generated_node_start_script_binds_vite_to_container(tmp_path):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"start": "vite"}}),
+        encoding="utf-8",
+    )
+
+    dockerfile = _generated_dockerfile(tmp_path)
+
+    assert 'npm", "start", "--", "--host", "0.0.0.0", "--port", "5173"' in dockerfile
+    assert "EXPOSE 5173" in dockerfile
+
+
 def test_generated_python_dockerfile_uses_pyproject(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
 
