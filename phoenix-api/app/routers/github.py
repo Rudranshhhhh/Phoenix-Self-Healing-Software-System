@@ -211,9 +211,9 @@ async def github_callback(
         key=COOKIE_NAME,
         value=cookie_value,
         httponly=True,          # JS cannot read it
-        samesite="lax",         # CSRF protection — works with redirect flows
+        samesite=config.SESSION_COOKIE_SAMESITE,
         max_age=SESSION_MAX_AGE,
-        secure=False,           # set to True in production (HTTPS)
+        secure=config.SESSION_COOKIE_SECURE,
         path="/",
     )
     return response

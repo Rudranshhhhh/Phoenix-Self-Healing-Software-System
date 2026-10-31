@@ -50,6 +50,12 @@ class Config:
         "GITHUB_TOKEN_ENCRYPTION_KEY", SESSION_SECRET_KEY
     )
     PHOENIX_AGENT_TOKEN: str = os.environ.get("PHOENIX_AGENT_TOKEN", "")
+    SESSION_COOKIE_SAMESITE: str = os.environ.get("SESSION_COOKIE_SAMESITE", "lax").lower()
+    SESSION_COOKIE_SECURE: bool = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Git author identity (for commits)
     PHOENIX_GIT_AUTHOR_NAME: str = os.environ.get(

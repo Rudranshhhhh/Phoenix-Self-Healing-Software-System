@@ -11,7 +11,7 @@ import type { GithubUser } from "../types/phoenix";
 // Vite server and its proxy forwards them to phoenix-api on port 8000.
 // ---------------------------------------------------------------------------
 
-const BASE: string = import.meta.env.VITE_API_URL ?? "";
+const BASE: string = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
