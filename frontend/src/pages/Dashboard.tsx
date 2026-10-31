@@ -39,6 +39,8 @@ export default function Dashboard() {
     () => (SHOW_REJECTED ? incidents : incidents.filter((i) => i.status !== "rejected")),
     [incidents],
   );
+  const validatedCount = incidents.filter((incident) => incident.validation_result === "PASS").length;
+  const pullRequestCount = incidents.filter((incident) => Boolean(incident.pr_url)).length;
   // The hero follows the most recently updated incident Phoenix is still working on,
   // if it changed in the last 10 minutes; otherwise the most recent incident overall.
   // Stops a stale "Detected 3h ago" incident from looking live.
@@ -88,6 +90,27 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {!hero && (
+              <div className="rounded-box border border-line bg-surface px-6 py-10">
+                <h2 className="text-[17px] font-semibold text-ink">Repository connected</h2>
+                <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-body">
+                  Phoenix is watching {repo.owner}/{repo.name}. No incidents have been reported yet.
+                  When GitHub Actions sends a failure, the local Docker agent will analyze it, validate a
+                  fix, and report the resulting pull request here.
+                </p>
+                <div className="mt-5 grid gap-3 text-[13px] text-muted sm:grid-cols-3">
+                  <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                    Incidents: {incidents.length}
+                  </span>
+                  <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                    Validated fixes: {validatedCount}
+                  </span>
+                  <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                    Pull requests: {pullRequestCount}
+                  </span>
+                </div>
+              </div>
+            )}
             <LiveHero
               summary={hero}
               incident={heroDetail && hero && heroDetail.id === hero.id ? heroDetail : null}

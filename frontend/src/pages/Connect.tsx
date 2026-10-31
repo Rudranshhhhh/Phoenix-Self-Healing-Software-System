@@ -73,15 +73,15 @@ function ScanDot({ working }: { working: boolean }) {
 
 // ---------------------------------------------------------------------------
 // Convert the API response into the Repository shape the UI needs.
-// We scan for CI by checking if language === Python; real workflow scanning
-// would require additional API calls per repo which we skip for UX speed.
+// The first polyglot milestone supports Python and JavaScript/TypeScript
+// repositories. Docker remains the final runtime validation authority.
 // ---------------------------------------------------------------------------
 
 function toRepository(r: ApiRepository): Repository {
-  const isPython = r.language === "Python";
-  const scan: SdkScan = isPython
-    ? { state: "installed", version: "CI", foundIn: ".github/workflows/", line: 1 }
-    : { state: "missing", checked: ["requirements.txt", "pyproject.toml"] };
+  const isSupported = ["Python", "JavaScript", "TypeScript"].includes(r.language);
+  const scan: SdkScan = isSupported
+    ? { state: "installed", version: "Docker + CI", foundIn: "repository manifest", line: 1 }
+    : { state: "missing", checked: ["package.json", "pyproject.toml", "requirements.txt"] };
   return {
     id: r.id,
     owner: r.owner,
@@ -114,16 +114,16 @@ function ScanCell({ scan, python }: { scan: SdkScan; python: boolean }) {
     case "outdated":
       return (
         <span className="flex min-w-0 flex-col items-start gap-1">
-          <Tag tone="pass">Python repo</Tag>
+          <Tag tone="pass">Supported project</Tag>
           <span className="max-w-full truncate font-mono text-[11.5px] text-muted">{scan.foundIn}</span>
         </span>
       );
     case "missing":
       return (
         <span className="flex flex-col items-start gap-1">
-          <Tag>{python ? "No Python CI" : "Not Python"}</Tag>
+          <Tag>{python ? "No supported CI" : "Runtime not supported"}</Tag>
           <span className="text-[12px] text-muted">
-            {python ? "Add a CI workflow first" : "Phoenix watches Python services"}
+          {python ? "Add a supported CI workflow first" : "This runtime is not supported yet"}
           </span>
         </span>
       );
@@ -206,6 +206,7 @@ function Picker() {
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<number | null>(null);
   const [rescanning, setRescanning] = useState<number | null>(null);
+  const [opening, setOpening] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Fetch real repos from the API
@@ -258,10 +259,17 @@ function Picker() {
   const selected = repos.find((r) => r.id === chosen) ?? null;
   const ready = selected?.scan.state === "installed" || selected?.scan.state === "outdated";
 
-  const open = () => {
+  const open = async () => {
     if (!selected || !ready) return;
-    selectRepo(selected);
-    navigate(`/app/${selected.owner}/${selected.name}`);
+    setOpening(true);
+    try {
+      await selectRepo(selected);
+      navigate(`/app/${selected.owner}/${selected.name}`);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not connect this repository.");
+    } finally {
+      setOpening(false);
+    }
   };
 
   return (
@@ -272,8 +280,8 @@ function Picker() {
           <StepLabel>Step two of two</StepLabel>
           <h1 className="mt-3 text-[clamp(1.8rem,4vw,2.4rem)] text-ink">Pick a repository to watch.</h1>
           <p className="mt-4 max-w-[40rem] text-[15px] leading-relaxed text-body">
-            Phoenix monitors Python repositories. Select one below and Phoenix will step in whenever a CI run
-            fails.
+            Phoenix supports Python and JavaScript/TypeScript repositories in this milestone. Select one below
+            and Phoenix will step in whenever a CI run fails.
           </p>
         </div>
 
@@ -439,15 +447,12 @@ function Picker() {
               · Phoenix steps in when a CI run fails
             </>
           )}
-          {selected && !ready && selected.language === "Python" && (
-            <span className="font-medium text-ink">Add a CI workflow to this repository first.</span>
-          )}
-          {selected && !ready && selected.language !== "Python" && (
-            <span className="font-medium text-ink">Phoenix can only watch Python services.</span>
+          {selected && !ready && (
+            <span className="font-medium text-ink">This repository runtime is not supported yet.</span>
           )}
         </p>
-        <Button tone="primary" size="lg" className="ml-auto" disabled={!ready} onClick={open}>
-          Open the dashboard
+        <Button tone="primary" size="lg" className="ml-auto" disabled={!ready || opening} onClick={() => void open()}>
+          {opening ? "Connecting repository…" : "Open the dashboard"}
           <ArrowRight size={16} />
         </Button>
       </div>

@@ -39,6 +39,7 @@ from typing import Optional
 from agent.sandbox.docker_runner import run_docker_sandbox
 from agent.sandbox.models import DockerResult, SandboxConfig, ValidationResult
 from agent.sandbox.workspace import SandboxWorkspace
+from agent.sandbox.project_detector import detect_project
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,21 @@ def _run_lint(
     config: SandboxConfig,
     result: ValidationResult,
 ) -> None:
-    """Run flake8 inside the sandbox. Updates result in place."""
+    """Run the detected project's lint command inside the sandbox."""
+    plan = detect_project(sandbox)
+    if plan.language != "python":
+        if plan.lint_command is None:
+            result.lint_passed = True
+            result.lint_stdout = "No lint script configured; Docker validation remains authoritative."
+            return
+        cmd = list(plan.lint_command)
+        proc = _run_subprocess(cmd, cwd=sandbox, timeout=config.lint_timeout_seconds)
+        result.lint_stdout = proc.stdout or ""
+        result.lint_stderr = proc.stderr or ""
+        result.lint_exit_code = proc.returncode
+        result.lint_passed = proc.returncode == 0
+        return
+
     lint_targets = config.lint_targets or _detect_lint_targets(sandbox)
     flake8_config = _find_flake8_config(sandbox)
 
@@ -175,7 +190,38 @@ def _run_tests(
     config: SandboxConfig,
     result: ValidationResult,
 ) -> None:
-    """Run pytest inside the sandbox. Updates result in place."""
+    """Run the detected project's test command inside the sandbox."""
+    plan = detect_project(sandbox)
+    if plan.language != "python":
+        if plan.test_command is None:
+            result.tests_passed = False
+            result.test_stderr = "No test script configured in package.json."
+            result.test_exit_code = 1
+            return
+        install = plan.install_command
+        if install:
+            install_proc = _run_subprocess(
+                list(install),
+                cwd=sandbox,
+                timeout=config.test_timeout_seconds,
+            )
+            if install_proc.returncode != 0:
+                result.test_stdout = install_proc.stdout or ""
+                result.test_stderr = install_proc.stderr or ""
+                result.test_exit_code = install_proc.returncode
+                result.tests_passed = False
+                return
+        proc = _run_subprocess(
+            list(plan.test_command),
+            cwd=sandbox,
+            timeout=config.test_timeout_seconds,
+        )
+        result.test_stdout = proc.stdout or ""
+        result.test_stderr = proc.stderr or ""
+        result.test_exit_code = proc.returncode
+        result.tests_passed = proc.returncode == 0
+        return
+
     test_paths = config.test_paths or _detect_test_paths(sandbox)
 
     cmd = [

@@ -54,7 +54,7 @@ interface SessionValue {
   /** Call DELETE /api/github/logout, clear local state. */
   signOut: () => void;
   /** Called by the Connect page after the user picks a repo. */
-  selectRepo: (repo: Repository) => void;
+  selectRepo: (repo: Repository) => Promise<void>;
   /** Called by OAuthCallback after a successful round-trip to reload the user. */
   refreshUser: () => Promise<GithubUser>;
 }
