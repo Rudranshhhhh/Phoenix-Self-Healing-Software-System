@@ -14,6 +14,7 @@ from agent.ai.llm_engine import LLMEngine
 from agent.sandbox import SandboxPipeline
 from agent.sandbox.models import SandboxConfig
 from agent.sandbox.repository_workspace import cloned_repository
+from agent.worker.repository_analysis import analyze_repository
 
 logger = logging.getLogger(__name__)
 _API_SOURCE = Path(__file__).resolve().parents[2] / "phoenix-api"
@@ -39,6 +40,8 @@ class AgentWorker:
                 time.sleep(self.poll_seconds)
 
     def process_one(self) -> bool:
+        if self.process_analysis():
+            return True
         response = self.session.post(
             f"{self.api_url}/api/agent/jobs/claim",
             params={"worker_id": self.worker_id},
@@ -62,6 +65,34 @@ class AgentWorker:
         self.session.post(
             f"{self.api_url}/api/agent/jobs/{incident_id}/result",
             params={"worker_id": self.worker_id},
+            headers={"X-Phoenix-Agent-Token": self.agent_token},
+            json=result,
+            timeout=30,
+        ).raise_for_status()
+        return True
+
+    def process_analysis(self) -> bool:
+        response = self.session.post(
+            f"{self.api_url}/api/agent/analysis/claim",
+            params={"worker_id": self.worker_id},
+            headers={"X-Phoenix-Agent-Token": self.agent_token},
+            timeout=30,
+        )
+        response.raise_for_status()
+        job = response.json().get("job")
+        if not job:
+            return False
+        repository = job["repository"]
+        token = job["github_token"]
+        result: dict
+        try:
+            with cloned_repository(repository, token, job["default_branch"], "") as root:
+                result = analyze_repository(root, repository)
+        except Exception as exc:
+            result = {"repository": repository, "status": "failed", "error": str(exc)}
+        result.update({"repository": repository, "worker_id": self.worker_id})
+        self.session.post(
+            f"{self.api_url}/api/agent/analysis/result",
             headers={"X-Phoenix-Agent-Token": self.agent_token},
             json=result,
             timeout=30,

@@ -58,6 +58,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import config
 from ..repository_store import RepositoryStore
+from ..analysis_store import AnalysisStore
 from ..session_store import COOKIE_NAME, SESSION_MAX_AGE, oauth_states, sessions
 
 logger = logging.getLogger(__name__)
@@ -286,6 +287,7 @@ async def set_selection(
     profile = await _github_get("/user", token)
     connected = RepositoryStore.upsert(profile.get("login", ""), selected, token)
     sessions.set_selected_repo(phoenix_session, connected)
+    AnalysisStore.enqueue(selected["fullName"], profile.get("login", ""))
     return JSONResponse({"repository": connected})
 
 

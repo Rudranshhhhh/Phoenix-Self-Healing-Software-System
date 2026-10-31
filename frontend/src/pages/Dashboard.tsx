@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { useSession } from "../state/SessionContext";
@@ -10,13 +10,28 @@ import { SHOW_REJECTED } from "../lib/flags";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { isActive } from "../lib/incident";
 import { REPO } from "../lib/repo";
+import { getRepositoryAnalysis } from "../api/phoenix";
+import { usePolling } from "../hooks/usePolling";
 
 const HERO_FRESH_MS = 10 * 60 * 1000;
 
 export default function Dashboard() {
   const params = useParams();
-  const { repo: sessionRepo } = useSession();
-  const incidentList = useIncidentList(sessionRepo ? `${sessionRepo.owner}/${sessionRepo.name}` : undefined);
+  const { repo: sessionRepo, user } = useSession();
+  const repositoryName = sessionRepo ? `${sessionRepo.owner}/${sessionRepo.name}` : undefined;
+  const incidentList = useIncidentList(repositoryName);
+  const analysisFetcher = useCallback(
+    (signal: AbortSignal) =>
+      sessionRepo && user
+        ? getRepositoryAnalysis(repositoryName!, user.login, signal)
+        : Promise.reject(new Error("No connected repository")),
+    [repositoryName, sessionRepo, user],
+  );
+  const analysis = usePolling(
+    analysisFetcher,
+    5000,
+    Boolean(sessionRepo && user),
+  );
 
   // A repository from the URL wins, then the one picked on the connect screen,
   // then the demo workspace so /app is never a dead end.
@@ -80,6 +95,55 @@ export default function Dashboard() {
         <p className="mb-4 mt-1 text-[14px] text-muted">
           Failures on {repo.defaultBranch} that Phoenix is handling.
         </p>
+
+        {analysis.data && (
+          <section className="mb-6 rounded-box border border-line bg-surface px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[16px] font-semibold text-ink">Runtime analysis</h2>
+                <p className="mt-1 text-[13px] text-muted">
+                  {analysis.data.status === "queued" && "Waiting for the local Docker agent…"}
+                  {analysis.data.status === "processing" && "Building and checking the repository locally…"}
+                  {analysis.data.status === "ready" && "Analysis completed from Docker Desktop telemetry."}
+                  {analysis.data.status === "failed" && "Analysis failed; inspect the agent logs for details."}
+                </p>
+              </div>
+              <span className="rounded-box border border-line bg-subtle px-2.5 py-1 text-[12px] text-body">
+                {analysis.data.status}
+              </span>
+            </div>
+            {analysis.data.result && (
+              <div className="mt-4 grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  Runtime: {analysis.data.result.language ?? "unknown"}
+                </span>
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  Dockerfile: {analysis.data.result.dockerfile_generated ? "generated" : "existing"}
+                </span>
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  Build: {analysis.data.result.build?.passed ? "passed" : "failed"}
+                </span>
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  Health: {analysis.data.result.health?.healthy
+                    ? `${analysis.data.result.health.path} · HTTP ${analysis.data.result.health.status_code}`
+                    : "failed"}
+                </span>
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  CPU: {analysis.data.result.resources?.["CPUPerc"] ?? "unavailable"}
+                </span>
+                <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                  Memory: {analysis.data.result.resources?.["MemUsage"] ?? "unavailable"}
+                </span>
+              </div>
+            )}
+            {analysis.data.result?.logs && (
+              <pre className="mt-4 max-h-40 overflow-auto rounded-box bg-black/90 p-3 text-[11px] leading-5 text-white">
+                {analysis.data.result.logs}
+              </pre>
+            )}
+            {analysis.error && <p className="mt-3 text-[13px] text-muted">Analysis unavailable; retrying…</p>}
+          </section>
+        )}
 
         {loading ? (
           <p className="text-[14px] text-muted">Loading incidents…</p>

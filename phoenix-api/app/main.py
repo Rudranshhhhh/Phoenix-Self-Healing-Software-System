@@ -14,6 +14,7 @@ from app.models import Incident, IncidentListResponse, IncidentSummary
 from app.database import close_database, init_database
 from app.routers.github import router as github_router
 from app.routers.agent_jobs import router as agent_jobs_router
+from app.routers.analysis import router as analysis_router
 from app.routers.incidents import create_incident
 from app.incident_store import IncidentStore
 
@@ -30,6 +31,7 @@ app.add_middleware(
 # Mount the GitHub OAuth + repo-read router
 app.include_router(github_router)
 app.include_router(agent_jobs_router)
+app.include_router(analysis_router)
 
 
 @app.on_event("startup")

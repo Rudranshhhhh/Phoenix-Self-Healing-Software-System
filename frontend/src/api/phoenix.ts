@@ -386,3 +386,27 @@ export function getCommitDiff(
 export function githubLogout(): Promise<{ status: string }> {
   return deleteJson("/api/github/logout");
 }
+
+export interface RepositoryAnalysis {
+  repository: string;
+  status: "queued" | "processing" | "ready" | "failed";
+  result?: {
+    language?: string;
+    dockerfile_present?: boolean;
+    dockerfile_generated?: boolean;
+    build?: { passed: boolean };
+    health?: { healthy: boolean; path?: string; status_code?: number; error?: string };
+    resources?: Record<string, string>;
+    logs?: string;
+    error?: string;
+  } | null;
+}
+
+export function getRepositoryAnalysis(
+  repository: string,
+  githubLogin: string,
+  signal?: AbortSignal,
+): Promise<RepositoryAnalysis> {
+  const query = new URLSearchParams({ repository, github_login: githubLogin });
+  return getJson(`/api/github/analysis?${query}`, signal);
+}

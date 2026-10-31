@@ -86,6 +86,10 @@ def _create_collections_and_indexes(db):
         [("github_login", 1), ("full_name", 1)], unique=True
     )
     db.repository_connections.create_index("full_name")
+    if "repository_analysis" not in db.list_collection_names():
+        db.create_collection("repository_analysis")
+    db.repository_analysis.create_index([("repository", 1), ("github_login", 1)], unique=True)
+    db.repository_analysis.create_index([("status", 1), ("lease_expires_at", 1)])
     logger.info("✓ Created incidents collection with indexes")
 
     logger.info("✓ Database initialization complete")
