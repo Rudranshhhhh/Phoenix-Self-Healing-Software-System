@@ -25,6 +25,17 @@ def _script_port(script: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _candidate_ports(root: pathlib.Path, dockerfile: pathlib.Path) -> list[int]:
+    text = dockerfile.read_text(encoding="utf-8", errors="replace")
+    ports = [int(value) for value in re.findall(r"^\s*EXPOSE\s+(\d+)", text, re.MULTILINE)]
+    if ports:
+        return list(dict.fromkeys(ports))
+    plan = detect_project(root)
+    if plan.language == "javascript":
+        return [3000, 5173, 4173, 8080]
+    return [8000, 8080, 5000]
+
+
 def _generated_dockerfile(root: pathlib.Path) -> str:
     plan = detect_project(root)
     if plan.language == "javascript":
@@ -98,6 +109,7 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
         "container": container,
     }
     try:
+        candidate_ports = _candidate_ports(root, dockerfile)
         build = subprocess.run(
             ["docker", "build", "-t", image, "-f", str(dockerfile), str(dockerfile.parent)],
             capture_output=True, text=True, timeout=300,
@@ -106,16 +118,23 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
         if build.returncode:
             result["error"] = "Docker image build failed"
             return result
+        run_command = [
+            "docker", "run", "-d", "--label", "phoenix.analysis=true",
+        ]
+        for candidate_port in candidate_ports:
+            run_command.extend(["-p", f"127.0.0.1::{candidate_port}"])
+        run_command.extend(["--name", container, image])
         run = subprocess.run(
-            ["docker", "run", "-d", "--label", "phoenix.analysis=true", "-P", "--name", container, image],
+            run_command,
             capture_output=True, text=True, timeout=30,
         )
         if run.returncode:
             result["error"] = run.stderr[-2000:]
             return result
         result["container_id"] = run.stdout.strip()
-        port = _published_port(container)
-        health = _probe_health(port, 45)
+        published_ports = _published_ports(container)
+        health = _probe_health(published_ports, 45)
+        result["ports"] = published_ports
         result["health"] = health
         result["status"] = "ready" if health["healthy"] else "failed"
         result["container_status"] = _command(
@@ -138,27 +157,37 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
             dockerfile.unlink(missing_ok=True)
 
 
-def _published_port(container: str) -> int:
+def _published_ports(container: str) -> dict[int, int]:
     inspect = _command(["docker", "port", container])
+    ports: dict[int, int] = {}
     for line in inspect.splitlines():
-        if ":" in line:
-            return int(line.rsplit(":", 1)[1])
-    raise RuntimeError("Container did not publish a port")
+        match = re.match(r"(\d+)/\w+\s+->\s+[\d.]+:(\d+)", line.strip())
+        if match:
+            ports[int(match.group(1))] = int(match.group(2))
+    if not ports:
+        raise RuntimeError("Container did not publish any candidate port")
+    return ports
 
 
-def _probe_health(port: int, timeout: int) -> dict[str, Any]:
+def _probe_health(ports: dict[int, int], timeout: int) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     paths = ("/health", "/api/health", "/")
     last_error = ""
     while time.monotonic() < deadline:
-        for path in paths:
-            try:
-                response = requests.get(f"http://127.0.0.1:{port}{path}", timeout=2)
-                if response.status_code < 500:
-                    return {"healthy": True, "path": path, "status_code": response.status_code}
-                last_error = f"{path}: HTTP {response.status_code}"
-            except requests.RequestException as exc:
-                last_error = str(exc)
+        for container_port, host_port in ports.items():
+            for path in paths:
+                try:
+                    response = requests.get(f"http://127.0.0.1:{host_port}{path}", timeout=2)
+                    if response.status_code < 500:
+                        return {
+                            "healthy": True,
+                            "path": path,
+                            "status_code": response.status_code,
+                            "container_port": container_port,
+                        }
+                    last_error = f"{container_port}{path}: HTTP {response.status_code}"
+                except requests.RequestException as exc:
+                    last_error = f"{container_port}{path}: {exc}"
         time.sleep(2)
     return {"healthy": False, "error": last_error}
 
