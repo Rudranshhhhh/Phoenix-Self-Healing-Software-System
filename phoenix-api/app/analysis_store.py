@@ -18,7 +18,6 @@ class AnalysisStore:
             "repository": repository,
             "github_login": github_login,
             "status": "queued",
-            "created_at": now,
             "updated_at": now,
             "result": None,
             "error": None,
@@ -28,6 +27,7 @@ class AnalysisStore:
             {"$set": document, "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
+        document["created_at"] = now
         return document
 
     @staticmethod

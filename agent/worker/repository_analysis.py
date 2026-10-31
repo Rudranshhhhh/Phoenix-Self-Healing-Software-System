@@ -20,10 +20,26 @@ logger = logging.getLogger(__name__)
 def _generated_dockerfile(root: pathlib.Path) -> str:
     plan = detect_project(root)
     if plan.language == "javascript":
+        package = {}
+        package_path = root / "package.json"
+        if package_path.is_file():
+            try:
+                package = json.loads(package_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                package = {}
+        scripts = package.get("scripts", {}) if isinstance(package, dict) else {}
+        if "start" in scripts:
+            command = 'CMD ["npm", "start"]'
+        elif "dev" in scripts:
+            command = 'CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]'
+        elif "preview" in scripts:
+            command = 'CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0"]'
+        else:
+            command = 'CMD ["npm", "run", "start"]'
         return (
             "FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\n"
-            "RUN npm ci --omit=dev || npm install --omit=dev\nCOPY . .\n"
-            "EXPOSE 3000\nCMD [\"npm\", \"start\"]\n"
+            "RUN npm ci || npm install\nCOPY . .\n"
+            f"EXPOSE 3000\n{command}\n"
         )
     if (root / "pyproject.toml").exists():
         return (
