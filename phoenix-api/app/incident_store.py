@@ -118,6 +118,7 @@ class IncidentStore:
         limit: int = 50,
         status: Optional[str] = None,
         source: Optional[str] = None,
+        repository: Optional[str] = None,
     ) -> tuple[List[Dict[str, Any]], int]:
         """
         Fetch incidents with optional filters.
@@ -129,6 +130,8 @@ class IncidentStore:
             query["status"] = status
         if source:
             query["source"] = source
+        if repository:
+            query["repository"] = repository
         total = db.incidents.count_documents(query)
         incidents = (
             db.incidents.find(query)

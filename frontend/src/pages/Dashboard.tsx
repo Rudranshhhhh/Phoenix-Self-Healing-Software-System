@@ -16,7 +16,7 @@ const HERO_FRESH_MS = 10 * 60 * 1000;
 export default function Dashboard() {
   const params = useParams();
   const { repo: sessionRepo } = useSession();
-  const incidentList = useIncidentList();
+  const incidentList = useIncidentList(sessionRepo ? `${sessionRepo.owner}/${sessionRepo.name}` : undefined);
 
   // A repository from the URL wins, then the one picked on the connect screen,
   // then the demo workspace so /app is never a dead end.

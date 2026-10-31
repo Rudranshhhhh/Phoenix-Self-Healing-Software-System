@@ -101,6 +101,7 @@ def list_incidents(
     page_size: int = Query(100, ge=1, le=100),
     skip: int | None = Query(None, ge=0),
     limit: int | None = Query(None, ge=1, le=100),
+    repository: str | None = Query(None, description="owner/name repository filter"),
 ) -> IncidentListResponse:
     incidents = current_incidents()
     if status:
@@ -108,6 +109,8 @@ def list_incidents(
         incidents = [i for i in incidents if i.status in wanted]
     if repo:
         incidents = [i for i in incidents if i.repo == repo]
+    if repository:
+        incidents = [i for i in incidents if i.repo == repository]
     incidents.sort(key=lambda i: i.updated_at, reverse=True)
 
     mongo_incidents: list[dict] = []
@@ -117,6 +120,7 @@ def list_incidents(
             limit=limit if limit is not None else page_size,
             status=status if status and "," not in status else None,
             source=None,
+            repository=repository,
         )
         for incident in mongo_incidents:
             incident.pop("_id", None)

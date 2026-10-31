@@ -72,6 +72,7 @@ class _SessionStore:
             self._data[session_id] = {
                 "github_access_token": github_access_token,
                 "created_at": time.time(),
+                "selected_repo": None,
             }
         return sign_token(session_id)
 
@@ -98,6 +99,27 @@ class _SessionStore:
         if session_id:
             with self._lock:
                 self._data.pop(session_id, None)
+
+    def get_selected_repo(self, cookie_value: str) -> Optional[dict]:
+        """Return the repository selected by this signed-in user."""
+        session_id = unsign_token(cookie_value)
+        if not session_id:
+            return None
+        with self._lock:
+            entry = self._data.get(session_id)
+            return dict(entry["selected_repo"]) if entry and entry.get("selected_repo") else None
+
+    def set_selected_repo(self, cookie_value: str, repository: dict) -> bool:
+        """Persist the selected repository for the current session."""
+        session_id = unsign_token(cookie_value)
+        if not session_id:
+            return False
+        with self._lock:
+            entry = self._data.get(session_id)
+            if not entry:
+                return False
+            entry["selected_repo"] = dict(repository)
+        return True
 
     def purge_expired(self) -> None:
         """Remove stale entries (call periodically if desired)."""

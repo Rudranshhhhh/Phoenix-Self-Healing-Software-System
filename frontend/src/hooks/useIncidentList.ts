@@ -7,8 +7,12 @@ import { usePolling } from "./usePolling";
 
 const NO_INCIDENTS: IncidentSummary[] = [];
 
-export function useIncidentList() {
-  const { data, error, loading } = usePolling(getIncidents);
+export function useIncidentList(repository?: string) {
+  const fetcher = useCallback(
+    (signal: AbortSignal) => getIncidents(repository, signal),
+    [repository],
+  );
+  const { data, error, loading } = usePolling(fetcher);
   return { incidents: data?.items ?? NO_INCIDENTS, error, loading };
 }
 

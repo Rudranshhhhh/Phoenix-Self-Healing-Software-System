@@ -37,12 +37,26 @@ async function deleteJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function writeJson<T>(path: string, method: "PUT", body: unknown): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    credentials: "include",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${method} ${path} failed with ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
 // ---------------------------------------------------------------------------
 // Existing incident endpoints (unchanged)
 // ---------------------------------------------------------------------------
 
-export function getIncidents(signal?: AbortSignal): Promise<IncidentListResponse> {
-  return getJson<IncidentWireList>("/api/incidents?page_size=100", signal).then((response) => ({
+export function getIncidents(repository?: string, signal?: AbortSignal): Promise<IncidentListResponse> {
+  const query = repository ? `?page_size=100&repository=${encodeURIComponent(repository)}` : "?page_size=100";
+  return getJson<IncidentWireList>(`/api/incidents${query}`, signal).then((response) => ({
     items: response.items ?? response.incidents.map(toSummary),
     total: response.total,
     page: response.page,
@@ -245,6 +259,22 @@ export function getGitHubRepos(
   signal?: AbortSignal,
 ): Promise<ReposResponse> {
   return getJson(`/api/github/repos?page=${page}&per_page=50`, signal);
+}
+
+export interface SelectedRepository {
+  id: number;
+  owner: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+}
+
+export function getSelectedRepository(signal?: AbortSignal): Promise<{ repository: SelectedRepository | null }> {
+  return getJson("/api/github/selection", signal);
+}
+
+export function selectGitHubRepository(repository: ApiRepository): Promise<{ repository: ApiRepository }> {
+  return writeJson("/api/github/selection", "PUT", repository);
 }
 
 export interface Branch {

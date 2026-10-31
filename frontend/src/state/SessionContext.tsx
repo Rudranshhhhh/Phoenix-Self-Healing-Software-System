@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { GithubUser, Repository } from "../types/phoenix";
-import { getGitHubUser, githubLogout, startGitHubLogin } from "../api/phoenix";
+import {
+  getGitHubUser,
+  getSelectedRepository,
+  githubLogout,
+  selectGitHubRepository,
+  startGitHubLogin,
+} from "../api/phoenix";
 
 // ---------------------------------------------------------------------------
 // Session state: who is signed in and which repository they are watching.
@@ -64,9 +70,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController();
     getGitHubUser(controller.signal)
-      .then((u) => {
+      .then(async (u) => {
         setUser(u);
         setStatus(u ? "authenticated" : "unauthenticated");
+        if (u) {
+          const selected = await getSelectedRepository(controller.signal);
+          if (selected.repository) {
+            const restored: Repository = {
+              id: selected.repository.id,
+              owner: selected.repository.owner,
+              name: selected.repository.name,
+              private: false,
+              language: "Unknown",
+              pushedAt: new Date().toISOString(),
+              defaultBranch: selected.repository.defaultBranch,
+              description: "",
+              scan: { state: "installed", version: "connected", foundIn: "GitHub", line: 1 },
+            };
+            setRepo(restored);
+            writeRepo(restored);
+          }
+        }
       })
       .catch(() => {
         setStatus("unauthenticated");
@@ -90,7 +114,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
-  const selectRepo = useCallback((next: Repository) => {
+  const selectRepo = useCallback(async (next: Repository) => {
+    await selectGitHubRepository({
+      id: next.id,
+      owner: next.owner,
+      name: next.name,
+      fullName: `${next.owner}/${next.name}`,
+      private: next.private,
+      language: next.language,
+      pushedAt: next.pushedAt,
+      defaultBranch: next.defaultBranch,
+      description: next.description,
+      htmlUrl: "",
+      cloneUrl: "",
+      stargazersCount: 0,
+    });
     setRepo(next);
     writeRepo(next);
   }, []);

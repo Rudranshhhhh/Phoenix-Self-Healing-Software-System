@@ -53,7 +53,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, HTTPException, Query
+from fastapi import APIRouter, Body, Cookie, HTTPException, Query
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import config
@@ -244,6 +244,40 @@ async def github_me(
             "privateRepos": data.get("total_private_repos", 0),
         }
     )
+
+
+@router.get("/selection")
+async def get_selection(
+    phoenix_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
+) -> JSONResponse:
+    """Return the repository currently connected to this user session."""
+    _get_github_token(phoenix_session)
+    return JSONResponse({"repository": sessions.get_selected_repo(phoenix_session)})
+
+
+@router.put("/selection")
+async def set_selection(
+    repository: dict = Body(...),
+    phoenix_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
+) -> JSONResponse:
+    """Persist the repository whose incidents should appear in the dashboard."""
+    _get_github_token(phoenix_session)
+    required = ("id", "owner", "name", "fullName", "defaultBranch")
+    if any(not repository.get(field) for field in required):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Repository selection requires: {', '.join(required)}",
+        )
+    selected = {
+        "id": repository["id"],
+        "owner": repository["owner"],
+        "name": repository["name"],
+        "fullName": repository["fullName"],
+        "defaultBranch": repository["defaultBranch"],
+    }
+    if not sessions.set_selected_repo(phoenix_session, selected):
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+    return JSONResponse({"repository": selected})
 
 
 # ---------------------------------------------------------------------------
