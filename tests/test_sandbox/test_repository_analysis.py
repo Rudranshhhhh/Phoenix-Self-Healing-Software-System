@@ -14,6 +14,7 @@ def test_generated_node_dockerfile_uses_vite_dev_server(tmp_path):
     assert "FROM node:20-alpine" in dockerfile
     assert 'npm", "run", "dev"' in dockerfile
     assert "--host" in dockerfile
+    assert "EXPOSE 5173" in dockerfile
 
 
 def test_generated_python_dockerfile_uses_pyproject(tmp_path):

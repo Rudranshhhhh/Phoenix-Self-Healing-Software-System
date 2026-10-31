@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import pathlib
 import subprocess
 import time
@@ -30,16 +29,20 @@ def _generated_dockerfile(root: pathlib.Path) -> str:
         scripts = package.get("scripts", {}) if isinstance(package, dict) else {}
         if "start" in scripts:
             command = 'CMD ["npm", "start"]'
+            port = 3000
         elif "dev" in scripts:
-            command = 'CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]'
+            command = 'CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]'
+            port = 5173
         elif "preview" in scripts:
-            command = 'CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0"]'
+            command = 'CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173"]'
+            port = 4173
         else:
             command = 'CMD ["npm", "run", "start"]'
+            port = 3000
         return (
             "FROM node:20-alpine\nWORKDIR /app\nCOPY package*.json ./\n"
             "RUN npm ci || npm install\nCOPY . .\n"
-            f"EXPOSE 3000\n{command}\n"
+            f"EXPOSE {port}\n{command}\n"
         )
     if (root / "pyproject.toml").exists():
         return (
@@ -83,7 +86,7 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
             result["error"] = "Docker image build failed"
             return result
         run = subprocess.run(
-            ["docker", "run", "-d", "--rm", "--label", "phoenix.analysis=true", "-P", "--name", container, image],
+            ["docker", "run", "-d", "--label", "phoenix.analysis=true", "-P", "--name", container, image],
             capture_output=True, text=True, timeout=30,
         )
         if run.returncode:
@@ -101,6 +104,10 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
         result["resources"] = _resources(container)
         return result
     except Exception as exc:
+        result["logs"] = _command(["docker", "logs", "--tail", "200", container])
+        result["container_status"] = _command(
+            ["docker", "inspect", "-f", "{{.State.Status}}", container]
+        )
         result["error"] = str(exc)
         return result
     finally:
