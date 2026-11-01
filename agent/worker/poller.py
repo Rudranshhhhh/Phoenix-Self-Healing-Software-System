@@ -95,7 +95,37 @@ class AgentWorker:
         repository = job["repository"]
         token = job["github_token"]
         incident_id = incident["incident_id"]
-        logger.info("Processing incident %s from %s", incident_id, incident.get("source", "unknown"))
+        payload = incident.get("payload", {})
+        stage = payload.get("stage", "")
+
+        logger.info("Processing incident %s from %s (stage=%s)", incident_id, incident.get("source", "unknown"), stage)
+
+        # Skip bare webhook-triggered incidents — they only say "run failed: failure"
+        # with no log content. Real evidence comes from workflow step 12 (typecheck/pytest/etc.)
+        if stage == "workflow_run":
+            logs = payload.get("logs", "")
+            if len(logs) < 100:
+                logger.info(
+                    "Skipping %s: workflow_run stage with no real logs (%d chars). "
+                    "Step 12 will create a separate incident with actual error details.",
+                    incident_id, len(logs),
+                )
+                result = {
+                    "status": "agent_failed",
+                    "message": (
+                        "Skipped: workflow_run webhook has no error details. "
+                        "Waiting for the CI step-12 incident with actual logs."
+                    ),
+                }
+                self.session.post(
+                    f"{self.api_url}/api/agent/jobs/{incident_id}/result",
+                    params={"worker_id": self.worker_id},
+                    headers={"X-Phoenix-Agent-Token": self.agent_token},
+                    json=result,
+                    timeout=30,
+                ).raise_for_status()
+                return True
+
         try:
             if incident.get("source") == "github_ci":
                 incident = self._attach_github_logs(incident, repository, token)
