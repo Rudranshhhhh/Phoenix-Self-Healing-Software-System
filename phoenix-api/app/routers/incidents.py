@@ -123,6 +123,12 @@ async def create_incident(
             connected_github_login=connection.get("github_login") if connection else None,
         )
     except Exception as exc:
+        # A DuplicateKeyError means a concurrent request beat us — return that incident.
+        from pymongo.errors import DuplicateKeyError
+        if isinstance(exc, DuplicateKeyError):
+            existing = IncidentStore.check_duplicate(repository, commit, run_id) or incident_id
+            logger.warning("Race-condition duplicate for %s — returning %s", incident_id, existing)
+            return IncidentResponse(incident_id=existing, status="duplicate", message=f"Already tracking {existing}")
         logger.exception("Failed to persist incident %s: %s", incident_id, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
