@@ -419,6 +419,47 @@ async def _ensure_workflow_webhook(repository: dict[str, Any], token: str) -> No
     for hook in existing:
         hook_config = hook.get("config") or {}
         if hook_config.get("url") == callback:
+            hook_id = hook.get("id")
+            if not hook_id:
+                raise HTTPException(
+                    status_code=502,
+                    detail="GitHub returned a Phoenix webhook without an identifier.",
+                )
+            repair_url = f"{GITHUB_API_BASE}/repos/{repository['owner']}/{repository['name']}/hooks/{hook_id}"
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.patch(
+                    repair_url,
+                    headers={
+                        "Authorization": f"******",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json={
+                        "active": True,
+                        "events": ["workflow_run"],
+                        "config": {
+                            "url": callback,
+                            "content_type": "json",
+                            "secret": secret,
+                            "insecure_ssl": "0",
+                        },
+                    },
+                )
+            if response.status_code != 200:
+                logger.error(
+                    "Could not repair GitHub webhook %s for %s: HTTP %s %s",
+                    hook_id,
+                    repository["fullName"],
+                    response.status_code,
+                    response.text[:300],
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "GitHub rejected Phoenix webhook repair "
+                        f"(HTTP {response.status_code}). Reauthorize Phoenix and try again."
+                    ),
+                )
             return
     url = f"{GITHUB_API_BASE}/repos/{repository['owner']}/{repository['name']}/hooks"
     async with httpx.AsyncClient(timeout=15.0) as client:
