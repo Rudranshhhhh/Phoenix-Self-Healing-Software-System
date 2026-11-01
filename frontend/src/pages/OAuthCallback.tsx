@@ -5,12 +5,16 @@
  * (/api/github/callback), which:
  *   1. Verifies the `state` parameter
  *   2. Exchanges the code for a GitHub access token
- *   3. Sets an HttpOnly signed session cookie
- *   4. Redirects the browser to http://localhost:3000/connect/callback  ← here
+ *   3. Sets an HttpOnly session cookie (SameSite=None; Secure for cross-origin)
+ *   4. Redirects the browser to {FRONTEND_URL}/connect/callback  ← here
  *
  * At this point the session cookie is already in the browser's cookie jar.
- * This component just calls /api/github/me to pull the user profile into
- * React state, then navigates to /connect (the repository picker).
+ * This component calls /api/github/me (with credentials:include) to pull the
+ * user profile into React state, then navigates to /connect (the repo picker).
+ *
+ * If the API is on a different origin (e.g. Render) the cookie needs
+ * SameSite=None; Secure — both set automatically when GITHUB_REDIRECT_URI
+ * starts with https://.
  */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -40,16 +44,21 @@ export default function OAuthCallback() {
       return;
     }
 
-    // Cookie is already set by the backend redirect — just load the user.
-    refreshUser()
-      .then(() => {
-        navigate("/connect", { replace: true });
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        setErrorMsg(`Could not load your GitHub profile: ${msg}`);
-        setPhase("error");
-      });
+    // Give the browser a tick to commit the Set-Cookie header from the
+    // redirect before we make the next cross-origin request.
+    const timer = setTimeout(() => {
+      refreshUser()
+        .then(() => {
+          navigate("/connect", { replace: true });
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          setErrorMsg(`Could not load your GitHub profile: ${msg}`);
+          setPhase("error");
+        });
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [refreshUser, navigate, searchParams]);
 
   if (phase === "error") {

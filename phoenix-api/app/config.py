@@ -43,34 +43,34 @@ class Config:
     GITHUB_REDIRECT_URI: str = os.environ.get(
         "GITHUB_REDIRECT_URI", "http://localhost:8000/api/github/callback"
     )
-    PHOENIX_PUBLIC_URL: str = os.environ.get(
-        "PHOENIX_PUBLIC_URL",
-        GITHUB_REDIRECT_URI.rsplit("/api/github/callback", 1)[0],
-    ).rstrip("/")
+    # Public base URL of this API server (used for webhook registration).
+    PHOENIX_PUBLIC_URL: str = os.environ.get("PHOENIX_PUBLIC_URL", "").rstrip("/")
+    if not PHOENIX_PUBLIC_URL:
+        # Derive from redirect URI only as a local-dev fallback
+        PHOENIX_PUBLIC_URL = GITHUB_REDIRECT_URI.rsplit("/api/github/callback", 1)[0].rstrip("/")
+
+    # Where the React frontend lives — used to build post-OAuth redirect URLs.
+    FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
     # Secret used to sign session cookies.  Generate with: openssl rand -hex 32
     SESSION_SECRET_KEY: str = os.environ.get("SESSION_SECRET_KEY", "change-me-in-production")
-    FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
     GITHUB_TOKEN_ENCRYPTION_KEY: str = os.environ.get(
         "GITHUB_TOKEN_ENCRYPTION_KEY", SESSION_SECRET_KEY
     )
     PHOENIX_AGENT_TOKEN: str = os.environ.get("PHOENIX_AGENT_TOKEN", "")
-    # Cross-site OAuth (localhost frontend -> HTTPS Render API) requires
-    # SameSite=None and Secure. Local HTTP development keeps Lax/non-secure.
-    _oauth_callback_is_https: bool = os.environ.get(
-        "GITHUB_REDIRECT_URI", ""
-    ).lower().startswith("https://")
+
+    # SameSite=None + Secure is required when the frontend and API are on
+    # different origins (e.g. localhost:3000 → Render HTTPS).
+    # Set SESSION_COOKIE_SAMESITE=none and SESSION_COOKIE_SECURE=true in .env
+    # for cross-origin deployments; the auto-detection below handles local dev.
     SESSION_COOKIE_SAMESITE: str = os.environ.get(
         "SESSION_COOKIE_SAMESITE",
-        "none" if _oauth_callback_is_https else "lax",
+        "none" if os.environ.get("GITHUB_REDIRECT_URI", "").lower().startswith("https://") else "lax",
     ).lower()
     SESSION_COOKIE_SECURE: bool = os.environ.get(
         "SESSION_COOKIE_SECURE",
-        "true" if _oauth_callback_is_https else "false",
-    ).lower() in (
-        "1",
-        "true",
-        "yes",
-    )
+        "true" if os.environ.get("GITHUB_REDIRECT_URI", "").lower().startswith("https://") else "false",
+    ).lower() in ("1", "true", "yes")
 
     # Git author identity (for commits)
     PHOENIX_GIT_AUTHOR_NAME: str = os.environ.get(

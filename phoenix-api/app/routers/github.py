@@ -136,7 +136,9 @@ jobs:
 """
 
 # Where the frontend expects to land after a successful OAuth round-trip.
-FRONTEND_CALLBACK = f"{config.FRONTEND_URL}/connect/callback"
+# Computed at import time from config so it picks up env changes correctly.
+def _frontend_callback() -> str:
+    return f"{config.FRONTEND_URL}/connect/callback"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -321,7 +323,7 @@ async def github_callback(
     cookie_value = sessions.create(access_token)
 
     # ---- Redirect to the React callback route ----
-    response = RedirectResponse(url=FRONTEND_CALLBACK, status_code=302)
+    response = RedirectResponse(url=_frontend_callback(), status_code=302)
     response.set_cookie(
         key=COOKIE_NAME,
         value=cookie_value,
@@ -517,7 +519,11 @@ async def github_webhook(
     body = await request.body()
     expected = "sha256=" + hmac.new(
         config.PHOENIX_WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
+    ).hexdigest() if hasattr(hmac, "new") else (
+        "sha256=" + hmac.HMAC(
+            config.PHOENIX_WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256
+        ).hexdigest()
+    )
     if not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
         raise HTTPException(status_code=401, detail="Invalid GitHub webhook signature")
     if x_github_event != "workflow_run":
