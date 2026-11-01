@@ -1,4 +1,4 @@
-from agent.worker.repository_analysis import _candidate_ports
+from agent.worker.repository_analysis import _candidate_ports, _published_ports
 
 
 def test_existing_dockerfile_uses_declared_ports(tmp_path):
@@ -23,3 +23,12 @@ def test_existing_dockerfile_includes_command_port_when_expose_differs(tmp_path)
     )
 
     assert _candidate_ports(tmp_path, dockerfile) == [8000, 8080]
+
+
+def test_published_ports_reads_docker_inspect_bindings(monkeypatch):
+    monkeypatch.setattr(
+        "agent.worker.repository_analysis._command",
+        lambda command: '{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"49152"}]}',
+    )
+
+    assert _published_ports("container") == {8000: 49152}

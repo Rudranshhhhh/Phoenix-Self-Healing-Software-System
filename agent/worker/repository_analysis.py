@@ -169,12 +169,21 @@ def analyze_repository(root: pathlib.Path, repository: str) -> dict[str, Any]:
 
 
 def _published_ports(container: str) -> dict[int, int]:
-    inspect = _command(["docker", "port", container])
+    inspect = _command(["docker", "inspect", "-f", "{{json .NetworkSettings.Ports}}", container])
     ports: dict[int, int] = {}
-    for line in inspect.splitlines():
-        match = re.match(r"(\d+)/\w+\s+->\s+[\d.]+:(\d+)", line.strip())
-        if match:
-            ports[int(match.group(1))] = int(match.group(2))
+    try:
+        published = json.loads(inspect)
+    except (TypeError, ValueError):
+        published = {}
+    if isinstance(published, dict):
+        for container_port, bindings in published.items():
+            match = re.match(r"(\d+)/", container_port)
+            if not match or not isinstance(bindings, list):
+                continue
+            for binding in bindings:
+                if isinstance(binding, dict) and str(binding.get("HostPort", "")).isdigit():
+                    ports[int(match.group(1))] = int(binding["HostPort"])
+                    break
     if not ports:
         raise RuntimeError("Container did not publish any candidate port")
     return ports
