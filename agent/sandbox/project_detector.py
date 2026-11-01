@@ -36,7 +36,13 @@ def detect_project(root: Path) -> ProjectPlan:
             language="javascript",
             install_command=install,
             lint_command=(manager, "run", "lint") if "lint" in scripts else None,
-            test_command=(manager, "test") if "test" in scripts else None,
+            # Prefer: test → typecheck → build (in that order) as the validation command
+            test_command=(
+                (manager, "test") if "test" in scripts
+                else (manager, "run", "typecheck") if "typecheck" in scripts
+                else (manager, "run", "build") if "build" in scripts
+                else None
+            ),
         )
 
     return ProjectPlan(
