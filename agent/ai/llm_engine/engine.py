@@ -107,7 +107,7 @@ class LLMEngine:
         result = engine.run(evidence_dict_or_EvidenceInput)
 
     Or with dependency injection (e.g. in tests):
-        client = GroqLLMClient(api_key="test-key", model="llama-3.3-70b-versatile")
+        client = GroqLLMClient(api_key="test-key", model="openai/gpt-oss-120b")
         engine = LLMEngine(client=client)
     """
 

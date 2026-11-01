@@ -138,11 +138,20 @@ from the relevant_code above>",
 }}
 
 Constraints:
-- "patches" must be a non-empty array. Include ONE entry per file that must \
-change. Some bugs need coordinated edits in several files; include every \
-file change the fix requires.
-- Each old_code must be a verbatim substring of THAT file's source as shown \
-in relevant_code.
+- The response MUST be complete, valid JSON. Every string must be properly \
+closed. Every brace and bracket must be matched. Do not truncate the response \
+mid-string or mid-object under any circumstances.
+- "patches" must be a non-empty array. Include entries for every file that \
+must change. Most fixes need exactly one entry per changed file.
+- ONE entry per changed file unless two entries for the same file target \
+strictly non-overlapping source regions that cannot be expressed as a single \
+replacement. If a file needs both a signature change and a body change, \
+combine them into a single old_code/new_code pair that covers both, rather \
+than producing two separate entries. Duplicate or overlapping patches for the \
+same file region will corrupt the file and must not be produced.
+- Each old_code must be copied VERBATIM from the relevant_code above — \
+character for character, including indentation and line endings. Do not \
+paraphrase, trim, or reconstruct old_code from memory.
 - Each new_code must be a drop-in replacement with the same indentation as its \
 old_code.
 - Generate the COMPLETE fix, not merely the first local change that appears \

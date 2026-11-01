@@ -310,13 +310,41 @@ def _build_diagnosis_response(prompt: str) -> str:
     return json.dumps(response, indent=2)
 
 
+def _is_severity_bug_patch_prompt(prompt: str) -> bool:
+    """True when the patch prompt carries the severity-count bug's multi-file
+    evidence (both the service and repository source blocks present).
+
+    This lets the mock return a realistic, VALID two-file patch for that bug —
+    so the offline/mock evaluation exercises the harness's CORRECT path
+    (validation + sandbox) instead of only its failure path. Mock results are
+    still labelled as mock (model name + harness mode) and are never counted
+    as real Groq successes.
+    """
+    return (
+        "# FILE:" in prompt
+        and "backend/services/incident_service.py" in prompt
+        and "backend/repositories/incident_repository.py" in prompt
+    )
+
+
 def _build_patch_response(prompt: str) -> str:
     """Build a realistic multi-file patch JSON string from the rendered prompt.
 
     The mock returns a single patch (the simple-error case), in the multi-file
     envelope {"patches": [...], "explanation": ...} so it matches the current
     PatchResult schema.
+
+    For the severity-count bug specifically, the relevant_code contains source
+    from TWO files. The generic single-file builder would extract only the
+    first `# FILE:` marker line as old_code (a placeholder), which the patch
+    validator rejects. So for that evidence we return the canonical, verified
+    two-file fix instead — real source text, exact old_code/new_code, applied
+    through the same multi-file patch format.
     """
+    if _is_severity_bug_patch_prompt(prompt):
+        from agent.ai.llm_engine.fallback_patch import load_fallback
+        return json.dumps(load_fallback())
+
     error_type    = _extract_field(prompt, "Error Type")
     file_path     = _extract_field(prompt, "File")
     relevant_code = _extract_relevant_code(prompt)

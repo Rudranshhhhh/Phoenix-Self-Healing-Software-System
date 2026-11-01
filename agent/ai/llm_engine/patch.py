@@ -278,7 +278,9 @@ def generate_patch(
     raw = client.complete(
         user_prompt=prompt,
         system_prompt=SYSTEM_PROMPT,
-        max_tokens=1200,  # multi-file patches need more room than single-file did
+        max_tokens=2000,  # raised from 1200: multi-file 3-patch responses can exceed
+                          # 1200 tokens for this bug, causing truncated JSON (runs 4-6).
+                          # openai/gpt-oss-120b supports up to 65,536 completion tokens.
         temperature=0.1,  # Lower temperature for deterministic code output
     )
 

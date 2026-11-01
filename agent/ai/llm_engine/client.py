@@ -28,9 +28,31 @@ logger = logging.getLogger(__name__)
 # Groq OpenAI-compatible base URL
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
-# Default model — current Groq production chat model (131k context, 32k completion)
+# Default model — Groq production chat model openai/gpt-oss-120b
+# (131k context, 65,536 max completion). Groq retired llama-3.3-70b-versatile
+# to Enterprise-only access on 16 Aug 2026, so it 404s on the Developer plan.
 # Override via constructor or GROQ_MODEL env var.
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+
+def _retry_after_seconds(exc: Exception) -> Optional[float]:
+    """
+    Return the Retry-After value (seconds) from a rate-limit error, if present.
+
+    Groq/OpenAI return the header as seconds (an integer). We parse defensively:
+    any missing/unparseable header yields None so the caller falls back to
+    exponential backoff.
+    """
+    try:
+        response = getattr(exc, "response", None)
+        headers = getattr(response, "headers", None) or {}
+        # Header lookup is case-insensitive in HTTP; try both common spellings.
+        raw = headers.get("retry-after") or headers.get("Retry-After")
+        if raw is None:
+            return None
+        return max(0.0, float(raw))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 class GroqLLMClient:
@@ -57,16 +79,19 @@ class GroqLLMClient:
         temperature: float = 0.2,
         max_retries: int = 2,
         retry_delay_seconds: float = 3.0,
+        request_timeout_seconds: float = 30.0,
     ) -> None:
         """
         Args:
             api_key:              Groq API key. Defaults to GROQ_API_KEY env var.
             model:                Model name. Defaults to GROQ_MODEL env var or
-                                  llama-3.3-70b-versatile.
+                                  openai/gpt-oss-120b.
             max_tokens:           Maximum tokens in the LLM response.
             temperature:          Sampling temperature (lower = more deterministic).
             max_retries:          Number of retry attempts on transient errors.
             retry_delay_seconds:  Base delay between retries (doubles each attempt).
+            request_timeout_seconds: Hard per-request timeout in seconds. A request
+                                  that exceeds this fails fast instead of hanging.
         """
         resolved_key = api_key or os.environ.get("GROQ_API_KEY", "")
         if not resolved_key:
@@ -80,11 +105,14 @@ class GroqLLMClient:
         self._temperature = temperature
         self._max_retries = max_retries
         self._retry_delay = retry_delay_seconds
+        self._timeout = request_timeout_seconds
 
-        # Initialise the OpenAI-compatible client pointing at Groq
+        # Initialise the OpenAI-compatible client pointing at Groq.
+        # An explicit finite timeout ensures callers fail fast rather than hang.
         self._client = OpenAI(
             api_key=resolved_key,
             base_url=GROQ_BASE_URL,
+            timeout=request_timeout_seconds,
         )
 
         logger.info(
@@ -149,11 +177,16 @@ class GroqLLMClient:
 
             except RateLimitError as exc:
                 last_error = exc
-                wait = self._retry_delay * (2 ** (attempt - 1))
+                retry_after = _retry_after_seconds(exc)
+                if retry_after is not None:
+                    wait = retry_after
+                else:
+                    wait = self._retry_delay * (2 ** (attempt - 1))
                 logger.warning(
-                    "GroqLLMClient: rate limited on attempt %d — waiting %.1fs",
+                    "GroqLLMClient: rate limited on attempt %d — waiting %.1fs%s",
                     attempt,
                     wait,
+                    " (Retry-After)" if retry_after is not None else "",
                 )
                 time.sleep(wait)
 
@@ -169,12 +202,21 @@ class GroqLLMClient:
                     )
                     time.sleep(wait)
                 else:
-                    # 4xx errors are not retryable (bad request, auth failure, etc.)
-                    logger.error(
-                        "GroqLLMClient: client error %d — %s",
-                        exc.status_code,
-                        exc.message,
-                    )
+                    # 4xx errors are not retryable. Auth/permission failures
+                    # (401/403) must not be retried endlessly.
+                    if exc.status_code in (401, 403):
+                        logger.error(
+                            "GroqLLMClient: authentication/permission error %d — "
+                            "not retrying: %s",
+                            exc.status_code,
+                            exc.message,
+                        )
+                    else:
+                        logger.error(
+                            "GroqLLMClient: client error %d — not retrying: %s",
+                            exc.status_code,
+                            exc.message,
+                        )
                     return None
 
             except APIConnectionError as exc:

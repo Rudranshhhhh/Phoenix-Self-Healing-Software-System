@@ -231,3 +231,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Phoenix LLM Engine — generated evaluation output (not source, not committed)
+eval_results.json
+eval_results_after_tuning.json
+eval_smoke.json
+
+# Unexplained workspace artifact — excluded from version control
+k_Arzl3UcorAwPGiVg4HUdWGdyb3FY2Hcub3FdGTDQJDJ25KPkhh6X
