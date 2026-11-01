@@ -16,6 +16,11 @@ uvicorn app.main:app --reload --port 8000
 
 Endpoints (CORS allows `http://localhost:3000`; interactive docs at http://localhost:8000/docs):
 
+When a repository is selected through GitHub OAuth, Phoenix registers a
+`workflow_run` webhook on that repository. The OAuth app therefore needs the
+`repo`, `read:user`, and `admin:repo_hook` scopes. Failed completed Actions runs
+are queued for the local Docker agent; successful runs are ignored.
+
 - `GET /api/health`
 - `GET /api/incidents?status=validated,pr_opened&repo=phoenix-demo/orders-api&page=1&page_size=20`
 - `GET /api/incidents/{id}` (404 `{"detail": "Incident not found"}` if unknown)

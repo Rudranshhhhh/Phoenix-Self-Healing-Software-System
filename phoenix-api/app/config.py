@@ -43,6 +43,10 @@ class Config:
     GITHUB_REDIRECT_URI: str = os.environ.get(
         "GITHUB_REDIRECT_URI", "http://localhost:8000/api/github/callback"
     )
+    PHOENIX_PUBLIC_URL: str = os.environ.get(
+        "PHOENIX_PUBLIC_URL",
+        GITHUB_REDIRECT_URI.rsplit("/api/github/callback", 1)[0],
+    ).rstrip("/")
     # Secret used to sign session cookies.  Generate with: openssl rand -hex 32
     SESSION_SECRET_KEY: str = os.environ.get("SESSION_SECRET_KEY", "change-me-in-production")
     FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")

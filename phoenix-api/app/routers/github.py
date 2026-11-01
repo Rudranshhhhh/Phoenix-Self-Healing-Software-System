@@ -49,16 +49,21 @@ Security
 from __future__ import annotations
 
 import logging
+import hashlib
+import hmac
+import json
 from typing import Any, Optional
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Body, Cookie, HTTPException, Query
+from fastapi import Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import config
 from ..repository_store import RepositoryStore
 from ..analysis_store import AnalysisStore
+from ..incident_store import IncidentStore
 from ..session_store import COOKIE_NAME, SESSION_MAX_AGE, oauth_states, sessions
 
 logger = logging.getLogger(__name__)
@@ -74,7 +79,7 @@ GITHUB_API_BASE = "https://api.github.com"
 
 # Scopes: repo gives full access to public + private repos (read + write),
 # which is what Phoenix needs to clone, read diffs, and open PRs.
-OAUTH_SCOPES = "repo,read:user"
+OAUTH_SCOPES = "repo,read:user,admin:repo_hook"
 
 # Where the frontend expects to land after a successful OAuth round-trip.
 FRONTEND_CALLBACK = f"{config.FRONTEND_URL}/connect/callback"
@@ -288,7 +293,113 @@ async def set_selection(
     connected = RepositoryStore.upsert(profile.get("login", ""), selected, token)
     sessions.set_selected_repo(phoenix_session, connected)
     AnalysisStore.enqueue(selected["fullName"], profile.get("login", ""))
+    await _ensure_workflow_webhook(selected, token)
     return JSONResponse({"repository": connected})
+
+
+async def _ensure_workflow_webhook(repository: dict[str, Any], token: str) -> None:
+    """Subscribe the selected repository to completed GitHub Actions runs."""
+    callback = f"{config.PHOENIX_PUBLIC_URL}/api/github/webhook"
+    secret = config.PHOENIX_WEBHOOK_SECRET
+    existing = await _github_get(
+        f"/repos/{repository['owner']}/{repository['name']}/hooks",
+        token,
+        per_page=100,
+    )
+    for hook in existing:
+        hook_config = hook.get("config") or {}
+        if hook_config.get("url") == callback:
+            return
+    url = f"{GITHUB_API_BASE}/repos/{repository['owner']}/{repository['name']}/hooks"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={
+                "name": "web",
+                "active": True,
+                "events": ["workflow_run"],
+                "config": {
+                    "url": callback,
+                    "content_type": "json",
+                    "secret": secret,
+                    "insecure_ssl": "0",
+                },
+            },
+        )
+    if response.status_code not in (201, 202):
+        logger.error(
+            "Could not register GitHub webhook for %s: HTTP %s %s",
+            repository["fullName"],
+            response.status_code,
+            response.text[:300],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Repository connected, but Phoenix could not register its GitHub Actions webhook.",
+        )
+
+
+@router.post("/webhook")
+async def github_webhook(
+    request: Request,
+    x_github_event: Optional[str] = Header(None),
+    x_hub_signature_256: Optional[str] = Header(None),
+) -> dict[str, str]:
+    """Turn failed completed GitHub Actions runs into agent jobs."""
+    body = await request.body()
+    expected = "sha256=" + hmac.new(
+        config.PHOENIX_WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256
+    ).hexdigest()
+    if not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
+        raise HTTPException(status_code=401, detail="Invalid GitHub webhook signature")
+    if x_github_event != "workflow_run":
+        return {"status": "ignored"}
+
+    payload = json.loads(body)
+    run = payload.get("workflow_run") or {}
+    if payload.get("action") != "completed" or run.get("conclusion") in {"success", "skipped", "neutral"}:
+        return {"status": "ignored"}
+    repository = (payload.get("repository") or {}).get("full_name")
+    commit = run.get("head_sha")
+    branch = run.get("head_branch") or (payload.get("repository") or {}).get("default_branch")
+    run_id = run.get("id")
+    if not repository or not commit or not branch or not run_id:
+        raise HTTPException(status_code=422, detail="Incomplete workflow_run payload")
+
+    incident_id = IncidentStore.generate_incident_id()
+    connection = RepositoryStore.get_for_repository(repository)
+    IncidentStore.create_incident(
+        incident_id=incident_id,
+        source="github_ci",
+        repository=repository,
+        commit=commit,
+        branch=branch,
+        payload={
+            "source": "github_ci",
+            "repository": repository,
+            "commit": commit,
+            "branch": branch,
+            "run_id": run_id,
+            "run_url": run.get("html_url"),
+            "workflow": (run.get("name") or "GitHub Actions"),
+            "stage": "workflow_run",
+            "logs": f"GitHub Actions run failed: {run.get('conclusion')}",
+        },
+        run_id=str(run_id),
+        connected_github_login=connection.get("github_login") if connection else None,
+    )
+    if connection:
+        IncidentStore.update_incident_status(
+            incident_id,
+            "queued_for_agent",
+            message="Queued for the connected Phoenix agent",
+        )
+    return {"status": "queued", "incident_id": incident_id}
 
 
 # ---------------------------------------------------------------------------

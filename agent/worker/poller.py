@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+import io
 import os
 import sys
 import time
 import uuid
+import zipfile
 from pathlib import Path
 
 import requests
@@ -72,6 +74,8 @@ class AgentWorker:
         token = job["github_token"]
         incident_id = incident["incident_id"]
         try:
+            if incident.get("source") == "github_ci":
+                incident = self._attach_github_logs(incident, repository, token)
             result = self._process(incident, repository, token)
         except Exception as exc:
             logger.exception("Incident %s failed in worker", incident_id)
@@ -84,6 +88,36 @@ class AgentWorker:
             timeout=30,
         ).raise_for_status()
         return True
+
+    def _attach_github_logs(self, incident: dict, repository: dict, token: str) -> dict:
+        """Fetch bounded GitHub Actions logs before asking the LLM to diagnose."""
+        run_id = incident.get("payload", {}).get("run_id")
+        if not run_id:
+            return incident
+        response = self.session.get(
+            f"https://api.github.com/repos/{repository['fullName']}/actions/runs/{run_id}/logs",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+            timeout=30,
+        )
+        if not response.ok:
+            logger.warning("Could not fetch logs for GitHub Actions run %s: HTTP %s", run_id, response.status_code)
+            return incident
+        try:
+            with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                names = [name for name in archive.namelist() if not name.endswith("/")]
+                logs = "\n\n".join(
+                    archive.read(name).decode("utf-8", errors="replace") for name in names
+                )
+            updated = dict(incident)
+            updated["payload"] = dict(incident.get("payload") or {})
+            updated["payload"]["logs"] = logs[-12000:]
+            return updated
+        except (OSError, zipfile.BadZipFile) as exc:
+            logger.warning("Could not read GitHub Actions logs for run %s: %s", run_id, exc)
+            return incident
 
     def process_analysis(self) -> bool:
         response = self.session.post(
