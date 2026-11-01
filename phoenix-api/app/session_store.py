@@ -17,8 +17,9 @@ import time
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
-from cryptography.fernet import Fernet
 import hashlib
+import base64
+from cryptography.fernet import Fernet, InvalidToken
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -40,7 +41,7 @@ OAUTH_STATE_TTL = 60 * 10      # 10 minutes — state param lifetime
 
 _signer = URLSafeTimedSerializer(config.SESSION_SECRET_KEY, salt="phoenix-session")
 _token_cipher = Fernet(
-    __import__("base64").urlsafe_b64encode(
+    base64.urlsafe_b64encode(
         hashlib.sha256(config.GITHUB_TOKEN_ENCRYPTION_KEY.encode("utf-8")).digest()
     )
 )
@@ -49,6 +50,26 @@ _token_cipher = Fernet(
 def sign_token(payload: str) -> str:
     """Return a signed, URL-safe token for `payload`."""
     return _signer.dumps(payload)
+
+
+def _sign_session(session_id: str, github_access_token: str) -> str:
+    """Sign a session identifier with an encrypted cross-instance token fallback."""
+    encrypted = _token_cipher.encrypt(github_access_token.encode("utf-8")).decode("ascii")
+    return sign_token(f"{session_id}.{encrypted}")
+
+
+def _session_parts(cookie_value: str) -> tuple[Optional[str], Optional[str]]:
+    payload = unsign_token(cookie_value)
+    if not payload:
+        return None, None
+    session_id, separator, encrypted = payload.partition(".")
+    if not separator:
+        return session_id, None
+    try:
+        token = _token_cipher.decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return session_id, None
+    return session_id, token
 
 
 def unsign_token(token: str, max_age: int = SESSION_MAX_AGE) -> Optional[str]:
@@ -102,13 +123,13 @@ class _SessionStore:
             )
         except RuntimeError:
             pass
-        return sign_token(session_id)
+        return _sign_session(session_id, github_access_token)
 
     def get_github_token(self, cookie_value: str) -> Optional[str]:
         """
         Verify the signed cookie and return the stored GitHub token, or None.
         """
-        session_id = unsign_token(cookie_value)
+        session_id, cookie_token = _session_parts(cookie_value)
         if not session_id:
             return None
         with self._lock:
@@ -131,7 +152,7 @@ class _SessionStore:
             except RuntimeError:
                 pass
         if not entry:
-            return None
+            return cookie_token
         # Hard-expire regardless of signature age
         if time.time() - entry["created_at"] > SESSION_MAX_AGE:
             self.delete(cookie_value)
@@ -140,7 +161,7 @@ class _SessionStore:
 
     def delete(self, cookie_value: str) -> None:
         """Remove the session (sign-out)."""
-        session_id = unsign_token(cookie_value)
+        session_id, _ = _session_parts(cookie_value)
         if session_id:
             with self._lock:
                 self._data.pop(session_id, None)
@@ -151,7 +172,7 @@ class _SessionStore:
 
     def get_selected_repo(self, cookie_value: str) -> Optional[dict]:
         """Return the repository selected by this signed-in user."""
-        session_id = unsign_token(cookie_value)
+        session_id, _ = _session_parts(cookie_value)
         if not session_id:
             return None
         with self._lock:
@@ -165,7 +186,7 @@ class _SessionStore:
 
     def set_selected_repo(self, cookie_value: str, repository: dict) -> bool:
         """Persist the selected repository for the current session."""
-        session_id = unsign_token(cookie_value)
+        session_id, _ = _session_parts(cookie_value)
         if not session_id:
             return False
         with self._lock:
