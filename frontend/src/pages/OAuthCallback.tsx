@@ -47,7 +47,13 @@ export default function OAuthCallback() {
     // Give the browser a tick to commit the Set-Cookie header from the
     // redirect before we make the next cross-origin request.
     const timer = setTimeout(() => {
-      refreshUser()
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Phoenix API did not respond within 15 seconds.")),
+          15_000,
+        );
+      });
+      Promise.race([refreshUser(), timeout])
         .then(() => {
           navigate("/connect", { replace: true });
         })
