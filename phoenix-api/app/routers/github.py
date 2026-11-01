@@ -120,6 +120,7 @@ jobs:
             npm install
           fi
           if [ -f package.json ]; then
+            node -e 'const p=require("./package.json"); if (p.scripts?.typecheck) process.exit(require("child_process").spawnSync("npm",["run","typecheck"],{stdio:"inherit"}).status ?? 1)'
             node -e 'const p=require("./package.json"); if (p.scripts?.lint) process.exit(require("child_process").spawnSync("npm",["run","lint"],{stdio:"inherit"}).status ?? 1)'
             node -e 'const p=require("./package.json"); if (p.scripts?.test) process.exit(require("child_process").spawnSync("npm",["test"],{stdio:"inherit"}).status ?? 1)'
             node -e 'const p=require("./package.json"); if (p.scripts?.build) process.exit(require("child_process").spawnSync("npm",["run","build"],{stdio:"inherit"}).status ?? 1)'
