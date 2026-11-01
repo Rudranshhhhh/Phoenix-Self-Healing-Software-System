@@ -219,7 +219,7 @@ def _parse_ci_logs(logs: str, stage: str) -> tuple[str, str, Optional[str], Opti
     # TypeScript tsc error
     m = _TS_ERROR.search(logs)
     if m:
-        return f"TS{m.group(3)}", m.group(4).strip(), m.group(1), int(m.group(2))
+        return m.group(3), m.group(4).strip(), m.group(1), int(m.group(2))
 
     # ESLint
     m = _ESLINT.search(logs)
