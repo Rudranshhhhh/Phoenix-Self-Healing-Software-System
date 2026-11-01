@@ -21,6 +21,18 @@ from app.config import config
 
 app = FastAPI(title="Phoenix API", version="0.1.0")
 
+@app.middleware("http")
+async def bridge_session_header(request, call_next):
+    """Allow the frontend to authenticate when browsers block third-party cookies."""
+    if request.headers.get("x-phoenix-session"):
+        headers = [
+            header for header in request.scope["headers"] if header[0] != b"cookie"
+        ]
+        request.scope["headers"] = headers + [
+            (b"cookie", f"phoenix_session={request.headers['x-phoenix-session']}".encode())
+        ]
+    return await call_next(request)
+
 _cors_origins_raw = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
 _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 if config.FRONTEND_URL not in _cors_origins:

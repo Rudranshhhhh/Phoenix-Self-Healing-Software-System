@@ -323,7 +323,10 @@ async def github_callback(
     cookie_value = sessions.create(access_token)
 
     # ---- Redirect to the React callback route ----
-    response = RedirectResponse(url=_frontend_callback(), status_code=302)
+    response = RedirectResponse(
+        url=f"{_frontend_callback()}?{urlencode({'phoenix_session': cookie_value})}",
+        status_code=302,
+    )
     response.set_cookie(
         key=COOKIE_NAME,
         value=cookie_value,

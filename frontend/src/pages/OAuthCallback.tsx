@@ -44,6 +44,12 @@ export default function OAuthCallback() {
       return;
     }
 
+    const session = searchParams.get("phoenix_session");
+    if (session) {
+      sessionStorage.setItem("phoenix.session", session);
+      window.history.replaceState({}, "", "/connect/callback");
+    }
+
     // Give the browser a tick to commit the Set-Cookie header from the
     // redirect before we make the next cross-origin request.
     const timer = setTimeout(() => {

@@ -13,11 +13,16 @@ import type { GithubUser } from "../types/phoenix";
 
 const BASE: string = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 
+function sessionHeaders(): Record<string, string> {
+  const session = sessionStorage.getItem("phoenix.session");
+  return session ? { "X-Phoenix-Session": session } : {};
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     signal,
     credentials: "include",          // send the session cookie on every request
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...sessionHeaders() },
   });
   if (!response.ok) {
     throw new Error(`GET ${path} failed with ${response.status} ${response.statusText}`.trim());
@@ -29,7 +34,7 @@ async function deleteJson<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     method: "DELETE",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...sessionHeaders() },
   });
   if (!response.ok) {
     throw new Error(`DELETE ${path} failed with ${response.status}`);
@@ -41,7 +46,7 @@ async function writeJson<T>(path: string, method: "PUT", body: unknown): Promise
   const response = await fetch(`${BASE}${path}`, {
     method,
     credentials: "include",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...sessionHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {

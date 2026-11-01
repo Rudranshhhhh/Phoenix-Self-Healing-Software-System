@@ -116,6 +116,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setRepo(null);
     writeRepo(null);
     setStatus("unauthenticated");
+    sessionStorage.removeItem("phoenix.session");
   }, []);
 
   const selectRepo = useCallback(async (next: Repository) => {
