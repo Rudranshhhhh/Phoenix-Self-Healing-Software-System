@@ -90,6 +90,12 @@ def _create_collections_and_indexes(db):
         db.create_collection("repository_analysis")
     db.repository_analysis.create_index([("repository", 1), ("github_login", 1)], unique=True)
     db.repository_analysis.create_index([("status", 1), ("lease_expires_at", 1)])
+    if "oauth_sessions" not in db.list_collection_names():
+        db.create_collection("oauth_sessions")
+    db.oauth_sessions.create_index("expires_at", expireAfterSeconds=0)
+    if "oauth_states" not in db.list_collection_names():
+        db.create_collection("oauth_states")
+    db.oauth_states.create_index("expires_at", expireAfterSeconds=0)
     logger.info("✓ Created incidents collection with indexes")
 
     logger.info("✓ Database initialization complete")

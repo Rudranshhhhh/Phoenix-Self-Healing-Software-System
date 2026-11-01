@@ -15,10 +15,15 @@ import secrets
 import threading
 import time
 from typing import Optional
+from datetime import datetime, timedelta, timezone
+
+from cryptography.fernet import Fernet
+import hashlib
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .config import config
+from .database import get_database
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -34,6 +39,11 @@ OAUTH_STATE_TTL = 60 * 10      # 10 minutes — state param lifetime
 # ---------------------------------------------------------------------------
 
 _signer = URLSafeTimedSerializer(config.SESSION_SECRET_KEY, salt="phoenix-session")
+_token_cipher = Fernet(
+    __import__("base64").urlsafe_b64encode(
+        hashlib.sha256(config.GITHUB_TOKEN_ENCRYPTION_KEY.encode("utf-8")).digest()
+    )
+)
 
 
 def sign_token(payload: str) -> str:
@@ -74,6 +84,24 @@ class _SessionStore:
                 "created_at": time.time(),
                 "selected_repo": None,
             }
+        try:
+            get_database().oauth_sessions.update_one(
+                {"_id": session_id},
+                {
+                    "$set": {
+                        "github_access_token": _token_cipher.encrypt(
+                            github_access_token.encode("utf-8")
+                        ).decode("ascii"),
+                        "created_at": datetime.now(timezone.utc),
+                        "expires_at": datetime.now(timezone.utc)
+                        + timedelta(seconds=SESSION_MAX_AGE),
+                        "selected_repo": None,
+                    }
+                },
+                upsert=True,
+            )
+        except RuntimeError:
+            pass
         return sign_token(session_id)
 
     def get_github_token(self, cookie_value: str) -> Optional[str]:
@@ -85,6 +113,23 @@ class _SessionStore:
             return None
         with self._lock:
             entry = self._data.get(session_id)
+        if not entry:
+            try:
+                document = get_database().oauth_sessions.find_one(
+                    {"_id": session_id, "expires_at": {"$gt": datetime.now(timezone.utc)}}
+                )
+                if document:
+                    entry = {
+                        "github_access_token": _token_cipher.decrypt(
+                            document["github_access_token"].encode("ascii")
+                        ).decode("utf-8"),
+                        "created_at": document["created_at"].timestamp(),
+                        "selected_repo": document.get("selected_repo"),
+                    }
+                    with self._lock:
+                        self._data[session_id] = entry
+            except RuntimeError:
+                pass
         if not entry:
             return None
         # Hard-expire regardless of signature age
@@ -99,6 +144,10 @@ class _SessionStore:
         if session_id:
             with self._lock:
                 self._data.pop(session_id, None)
+            try:
+                get_database().oauth_sessions.delete_one({"_id": session_id})
+            except RuntimeError:
+                pass
 
     def get_selected_repo(self, cookie_value: str) -> Optional[dict]:
         """Return the repository selected by this signed-in user."""
@@ -107,7 +156,12 @@ class _SessionStore:
             return None
         with self._lock:
             entry = self._data.get(session_id)
-            return dict(entry["selected_repo"]) if entry and entry.get("selected_repo") else None
+        if not entry:
+            try:
+                entry = get_database().oauth_sessions.find_one({"_id": session_id}) or {}
+            except RuntimeError:
+                entry = {}
+        return dict(entry["selected_repo"]) if entry and entry.get("selected_repo") else None
 
     def set_selected_repo(self, cookie_value: str, repository: dict) -> bool:
         """Persist the selected repository for the current session."""
@@ -116,9 +170,18 @@ class _SessionStore:
             return False
         with self._lock:
             entry = self._data.get(session_id)
-            if not entry:
-                return False
-            entry["selected_repo"] = dict(repository)
+            if entry:
+                entry["selected_repo"] = dict(repository)
+        try:
+            result = get_database().oauth_sessions.update_one(
+                {"_id": session_id}, {"$set": {"selected_repo": dict(repository)}}
+            )
+            if result.matched_count:
+                return True
+        except RuntimeError:
+            pass
+        if not entry:
+            return False
         return True
 
     def purge_expired(self) -> None:
@@ -149,6 +212,16 @@ class _StateStore:
         state = secrets.token_urlsafe(32)
         with self._lock:
             self._states[state] = time.time()
+        try:
+            get_database().oauth_states.insert_one(
+                {
+                    "_id": state,
+                    "expires_at": datetime.now(timezone.utc)
+                    + timedelta(seconds=OAUTH_STATE_TTL),
+                }
+            )
+        except RuntimeError:
+            pass
         return state
 
     def consume(self, state: str) -> bool:
@@ -158,6 +231,18 @@ class _StateStore:
         """
         with self._lock:
             created = self._states.pop(state, None)
+        if created is None:
+            try:
+                document = get_database().oauth_states.find_one_and_delete(
+                    {"_id": state, "expires_at": {"$gt": datetime.now(timezone.utc)}}
+                )
+                created = (
+                    document["expires_at"].timestamp() - OAUTH_STATE_TTL
+                    if document
+                    else None
+                )
+            except RuntimeError:
+                pass
         if created is None:
             return False
         return (time.time() - created) < OAUTH_STATE_TTL
