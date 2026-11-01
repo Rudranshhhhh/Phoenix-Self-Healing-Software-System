@@ -24,6 +24,14 @@ const SCOPES = [
     scope: "read:user",
     why: "Read your GitHub profile so Phoenix can show your username and avatar in the dashboard.",
   },
+  {
+    scope: "admin:repo_hook",
+    why: "Create and maintain the Phoenix workflow webhook so failed GitHub Actions runs reach Phoenix.",
+  },
+  {
+    scope: "workflow",
+    why: "Install and maintain Phoenix's GitHub Actions monitoring workflow in the connected repository.",
+  },
 ];
 
 const WORKFLOW_PATH = ".github/workflows/tests.yml";

@@ -453,12 +453,20 @@ async def _ensure_workflow_webhook(repository: dict[str, Any], token: str) -> No
                     response.status_code,
                     response.text[:300],
                 )
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
+                if response.status_code == 401:
+                    detail = (
+                        "GitHub rejected Phoenix webhook repair (HTTP 401). "
+                        "Sign out of Phoenix, sign in again, and approve the "
+                        "repository hook permission."
+                    )
+                else:
+                    detail = (
                         "GitHub rejected Phoenix webhook repair "
                         f"(HTTP {response.status_code}). Reauthorize Phoenix and try again."
-                    ),
+                    )
+                raise HTTPException(
+                    status_code=502,
+                    detail=detail,
                 )
             return
     url = f"{GITHUB_API_BASE}/repos/{repository['owner']}/{repository['name']}/hooks"
