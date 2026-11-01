@@ -88,6 +88,7 @@ PHOENIX_WORKFLOW = """name: Phoenix Monitor
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -98,6 +99,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Node
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Set up Python
+        if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Validate repository
         shell: bash
         run: |
@@ -116,7 +128,8 @@ jobs:
             if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
             if [ -d tests ]; then pip install pytest; pytest -q; fi
           else
-            echo "Phoenix could not detect a supported project manifest."
+            echo "Phoenix could not detect a supported Node or Python project manifest."
+            exit 1
           fi
           if [ -f Dockerfile ]; then docker build -t phoenix-monitor:ci .; fi
 """
