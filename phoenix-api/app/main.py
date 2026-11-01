@@ -17,11 +17,14 @@ from app.routers.agent_jobs import router as agent_jobs_router
 from app.routers.analysis import router as analysis_router
 from app.routers.incidents import create_incident
 from app.incident_store import IncidentStore
+from app.config import config
 
 app = FastAPI(title="Phoenix API", version="0.1.0")
 
 _cors_origins_raw = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
 _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+if config.FRONTEND_URL not in _cors_origins:
+    _cors_origins.append(config.FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,

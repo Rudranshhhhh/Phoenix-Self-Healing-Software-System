@@ -328,9 +328,9 @@ async def github_callback(
         key=COOKIE_NAME,
         value=cookie_value,
         httponly=True,          # JS cannot read it
-        samesite=config.SESSION_COOKIE_SAMESITE,
+        samesite="none",
         max_age=SESSION_MAX_AGE,
-        secure=config.SESSION_COOKIE_SECURE,
+        secure=True,
         path="/",
     )
     return response
