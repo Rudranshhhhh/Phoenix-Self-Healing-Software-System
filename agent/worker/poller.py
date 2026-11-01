@@ -73,8 +73,13 @@ class AgentWorker:
                 time.sleep(self.poll_seconds)
 
     def process_one(self) -> bool:
+        if self.process_incident():
+            return True
         if self.process_analysis():
             return True
+        return False
+
+    def process_incident(self) -> bool:
         response = self.session.post(
             f"{self.api_url}/api/agent/jobs/claim",
             params={"worker_id": self.worker_id},
@@ -90,6 +95,7 @@ class AgentWorker:
         repository = job["repository"]
         token = job["github_token"]
         incident_id = incident["incident_id"]
+        logger.info("Processing incident %s from %s", incident_id, incident.get("source", "unknown"))
         try:
             if incident.get("source") == "github_ci":
                 incident = self._attach_github_logs(incident, repository, token)
@@ -148,6 +154,7 @@ class AgentWorker:
         if not job:
             return False
         repository = job["repository"]
+        logger.info("Analyzing repository %s with Docker", repository)
         token = job["github_token"]
         result: dict
         try:

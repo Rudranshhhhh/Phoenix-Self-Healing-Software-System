@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Body, Cookie, Header, HTTPException, Query
@@ -41,7 +42,10 @@ def claim_analysis(
     x_phoenix_agent_token: Optional[str] = Header(None),
 ) -> dict:
     _authorize(x_phoenix_agent_token)
-    job = AnalysisStore.claim(worker_id, 300)
+    job = AnalysisStore.claim(
+        worker_id,
+        int(os.environ.get("PHOENIX_ANALYSIS_LEASE_SECONDS", "900")),
+    )
     if not job:
         return {"job": None}
     connection = RepositoryStore.get_for_repository(job["repository"])
