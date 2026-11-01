@@ -45,7 +45,14 @@ async function writeJson<T>(path: string, method: "PUT", body: unknown): Promise
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`${method} ${path} failed with ${response.status}`);
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string") detail = `: ${payload.detail}`;
+    } catch {
+      // Keep the HTTP status when the server does not return JSON.
+    }
+    throw new Error(`${method} ${path} failed with ${response.status}${detail}`);
   }
   return (await response.json()) as T;
 }

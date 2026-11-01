@@ -153,9 +153,18 @@ async def _ensure_monitoring_workflow(repository: dict[str, Any], token: str) ->
         if existing.status_code == 200:
             return
         if existing.status_code not in (404,):
+            logger.error(
+                "Could not inspect Phoenix workflow for %s: GitHub HTTP %s %s",
+                repository["fullName"],
+                existing.status_code,
+                existing.text[:300],
+            )
             raise HTTPException(
                 status_code=502,
-                detail="Repository connected, but Phoenix could not inspect its monitoring workflow.",
+                detail=(
+                    "GitHub rejected Phoenix workflow inspection "
+                    f"(HTTP {existing.status_code}). Reauthorize GitHub and try again."
+                ),
             )
         content = base64.b64encode(PHOENIX_WORKFLOW.encode("utf-8")).decode("ascii")
         payload: dict[str, Any] = {
@@ -173,7 +182,11 @@ async def _ensure_monitoring_workflow(repository: dict[str, Any], token: str) ->
         )
         raise HTTPException(
             status_code=502,
-            detail="Repository connected, but Phoenix could not install its monitoring workflow.",
+            detail=(
+                "GitHub rejected Phoenix workflow installation "
+                f"(HTTP {response.status_code}). Check repository write permission "
+                "and reauthorize GitHub."
+            ),
         )
 
 
@@ -369,9 +382,9 @@ async def set_selection(
     profile = await _github_get("/user", token)
     connected = RepositoryStore.upsert(profile.get("login", ""), selected, token)
     sessions.set_selected_repo(phoenix_session, connected)
-    AnalysisStore.enqueue(selected["fullName"], profile.get("login", ""))
     await _ensure_workflow_webhook(selected, token)
     await _ensure_monitoring_workflow(selected, token)
+    AnalysisStore.enqueue(selected["fullName"], profile.get("login", ""))
     return JSONResponse({"repository": connected})
 
 
@@ -418,7 +431,11 @@ async def _ensure_workflow_webhook(repository: dict[str, Any], token: str) -> No
         )
         raise HTTPException(
             status_code=502,
-            detail="Repository connected, but Phoenix could not register its GitHub Actions webhook.",
+            detail=(
+                "GitHub rejected Phoenix webhook registration "
+                f"(HTTP {response.status_code}). Reauthorize GitHub with "
+                "repository hook administration permission and try again."
+            ),
         )
 
 
