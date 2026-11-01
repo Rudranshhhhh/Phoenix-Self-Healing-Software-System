@@ -39,4 +39,4 @@ as a Phoenix incident, and then processed by the local agent.
 
 Phoenix never overwrites an existing workflow at that path. Re-select the
 repository after reauthorizing GitHub if the OAuth scope was changed to include
-repository hook administration.
+repository hook administration and workflow permissions.

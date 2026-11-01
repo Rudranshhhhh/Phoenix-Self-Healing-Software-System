@@ -80,7 +80,7 @@ GITHUB_API_BASE = "https://api.github.com"
 
 # Scopes: repo gives full access to public + private repos (read + write),
 # which is what Phoenix needs to clone, read diffs, and open PRs.
-OAUTH_SCOPES = "repo,read:user,admin:repo_hook"
+OAUTH_SCOPES = "repo,read:user,admin:repo_hook,workflow"
 
 PHOENIX_WORKFLOW_PATH = ".github/workflows/phoenix-monitor.yml"
 PHOENIX_WORKFLOW = """name: Phoenix Monitor
@@ -180,14 +180,19 @@ async def _ensure_monitoring_workflow(repository: dict[str, Any], token: str) ->
             response.status_code,
             response.text[:300],
         )
-        raise HTTPException(
-            status_code=502,
-            detail=(
+        if response.status_code == 404:
+            detail = (
+                "GitHub could not create the monitoring workflow. "
+                "Reauthorize Phoenix with repository and workflow permissions, "
+                "then select this repository again."
+            )
+        else:
+            detail = (
                 "GitHub rejected Phoenix workflow installation "
                 f"(HTTP {response.status_code}). Check repository write permission "
                 "and reauthorize GitHub."
-            ),
-        )
+            )
+        raise HTTPException(status_code=502, detail=detail)
 
 
 def _get_github_token(phoenix_session: Optional[str]) -> str:
