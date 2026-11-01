@@ -1,10 +1,9 @@
 """
-Phoenix API — Incidents Endpoints
+Phoenix API — Incidents Router
 
-REAL implementation (not mocked):
-  POST /api/incidents       — receive CI/Docker incident, start pipeline
-  GET /api/incidents        — list incidents
-  GET /api/incidents/{id}   — full incident detail
+POST /api/incidents  — receive a CI or Docker failure, store it, queue for the agent
+GET  /api/incidents  — list (also served by main.py for fixture blending)
+GET  /api/incidents/{id}
 """
 import hashlib
 import hmac
@@ -16,122 +15,102 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, st
 from ..config import config
 from ..incident_store import IncidentStore
 from ..repository_store import RepositoryStore
-from ..orchestrator import PhoenixOrchestrator
-from ..schemas import (
-    CIWebhookPayload,
-    DockerIncidentPayload,
-    IncidentResponse,
-    IncidentsListResponse,
-)
+from ..schemas import IncidentResponse, IncidentsListResponse
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["incidents"])
-
-orchestrator = PhoenixOrchestrator()
+router = APIRouter(tags=["incidents"])
 
 
-def _verify_webhook_secret(token: Optional[str]) -> bool:
-    """
-    Verify the X-Phoenix-Token header against the configured webhook secret.
-    """
-    if not config.PHOENIX_WEBHOOK_SECRET:
-        logger.warning("No PHOENIX_WEBHOOK_SECRET configured — skipping auth")
+# ---------------------------------------------------------------------------
+# Auth helper
+# ---------------------------------------------------------------------------
+
+def _verify_token(token: Optional[str]) -> bool:
+    secret = config.PHOENIX_WEBHOOK_SECRET
+    if not secret:
+        logger.warning("PHOENIX_WEBHOOK_SECRET not configured — accepting all requests")
         return True
     if not token:
         return False
-    return hmac.compare_digest(token, config.PHOENIX_WEBHOOK_SECRET)
+    return hmac.compare_digest(token, secret)
 
 
-def _is_loop_guard(payload: dict) -> bool:
-    """
-    Check if this is a Phoenix-generated PR (loop guard).
-    Return True if it should be IGNORED.
-    """
-    # GitHub CI check
-    if payload.get("source") == "github_ci":
-        branch = payload.get("branch", "")
-        # Ignore if branch is phoenix/fix/*
-        if branch.startswith("phoenix/fix/"):
-            return True
-    return False
+# ---------------------------------------------------------------------------
+# POST /api/incidents
+# ---------------------------------------------------------------------------
 
-
-@router.post("/incidents", response_model=IncidentResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/api/incidents", response_model=IncidentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_incident(
-    payload: dict,  # Accept raw dict, we'll parse it
+    payload: dict,
     background_tasks: BackgroundTasks,
-    x_phoenix_token: Optional[str] = Header(None),
+    x_phoenix_token: Optional[str] = Header(default=None),
 ) -> IncidentResponse:
     """
-    POST /api/incidents
-
-    Webhook endpoint for CI failures (GitHub Actions) and Docker runtime incidents.
-    Always returns 202 Accepted immediately.
-    Processes the incident in a background task.
-
-    Authentication: X-Phoenix-Token header must match PHOENIX_WEBHOOK_SECRET.
-    Loop guard: Ignores incidents from phoenix/fix/* branches.
-    Deduplication: Returns existing incident_id if (repo, commit, run_id) already exists.
+    Webhook entry-point: GitHub Actions or Docker runtime POSTs a failure here.
+    Returns 202 immediately; queues work for the local agent worker.
     """
 
-    # 1. Authenticate
-    if not _verify_webhook_secret(x_phoenix_token):
-        logger.warning("Unauthorized webhook request")
+    # ── 1. Auth ──────────────────────────────────────────────────────────────
+    if not _verify_token(x_phoenix_token):
+        logger.warning(
+            "POST /api/incidents: 401 — token mismatch. "
+            "Ensure GitHub Actions secret PHOENIX_WEBHOOK_SECRET matches Render env var."
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-Phoenix-Token header",
+            detail="Invalid or missing X-Phoenix-Token. "
+                   "Set PHOENIX_WEBHOOK_SECRET in GitHub Actions secrets and Render env vars.",
         )
 
-    # 2. Parse payload (minimal validation)
+    # ── 2. Validate payload ───────────────────────────────────────────────────
     source = payload.get("source")
     if source not in ("github_ci", "docker_runtime"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid source: {source}. Must be 'github_ci' or 'docker_runtime'.",
+            detail=f"Invalid source '{source}'. Must be 'github_ci' or 'docker_runtime'.",
         )
 
-    repository = payload.get("repository")
-    commit = payload.get("commit")
-    branch = payload.get("branch")
-    run_id = payload.get("run_id")  # may be None for docker_runtime
+    repository = payload.get("repository", "").strip()
+    commit     = payload.get("commit", "").strip()
+    branch     = payload.get("branch", "").strip()
+    run_id     = payload.get("run_id")
 
-    if not all([repository, commit, branch]):
+    if not repository or not commit or not branch:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Missing required fields: repository, commit, branch",
         )
 
-    # 3. Loop guard
-    if _is_loop_guard(payload):
-        logger.info("Loop guard: ignoring incident from phoenix/fix/* branch")
-        return IncidentResponse(
-            incident_id="",
-            status="ignored",
-            message="Loop guard: ignoring Phoenix PR",
-        )
+    logger.info(
+        "POST /api/incidents: source=%s repo=%s branch=%s commit=%.7s run_id=%s",
+        source, repository, branch, commit, run_id,
+    )
 
-    # 4. Deduplication
+    # ── 3. Loop guard — ignore Phoenix's own fix branches ────────────────────
+    if branch.startswith("phoenix/fix/"):
+        logger.info("Loop guard: ignoring push on phoenix/fix/* branch")
+        return IncidentResponse(incident_id="", status="ignored", message="Loop guard: phoenix/fix/* branch")
+
+    # ── 4. Deduplication ──────────────────────────────────────────────────────
     existing_id = IncidentStore.check_duplicate(repository, commit, run_id)
     if existing_id:
-        logger.info(
-            "Deduplication: incident %s already exists for (repo=%s, commit=%s, run_id=%s)",
-            existing_id,
-            repository,
-            commit[:7],
-            run_id,
-        )
+        logger.info("Dedup: incident %s already exists for this (repo, commit, run_id)", existing_id)
         return IncidentResponse(
             incident_id=existing_id,
             status="duplicate",
-            message=f"Incident {existing_id} already exists",
+            message=f"Already tracking {existing_id}",
         )
 
-    # 5. Generate incident ID
+    # ── 5. Create incident ────────────────────────────────────────────────────
     incident_id = IncidentStore.generate_incident_id()
-    logger.info("Created incident %s", incident_id)
-    connection = RepositoryStore.get_for_repository(repository)
+    connection  = RepositoryStore.get_for_repository(repository)
 
-    # 6. Store incident
+    logger.info(
+        "Creating incident %s | connected=%s",
+        incident_id,
+        connection.get("full_name") if connection else "none",
+    )
+
     try:
         IncidentStore.create_incident(
             incident_id=incident_id,
@@ -140,25 +119,30 @@ async def create_incident(
             commit=commit,
             branch=branch,
             payload=payload,
-            run_id=run_id,
+            run_id=str(run_id) if run_id else None,
             connected_github_login=connection.get("github_login") if connection else None,
         )
     except Exception as exc:
-        logger.error("Failed to create incident: %s", exc)
+        logger.exception("Failed to persist incident %s: %s", incident_id, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to store incident",
+            detail="Failed to store incident — check MongoDB connection.",
         )
 
-    # 7. Start background pipeline
+    # ── 6. Queue for agent ────────────────────────────────────────────────────
     if connection:
         IncidentStore.update_incident_status(
             incident_id,
             "queued_for_agent",
             message="Queued for the connected Phoenix agent",
         )
+        logger.info("Incident %s queued_for_agent (worker will poll and claim it)", incident_id)
     else:
-        background_tasks.add_task(orchestrator.process_incident, incident_id)
+        logger.warning(
+            "Incident %s has no connected repository — not queued for agent. "
+            "User must connect the repo at /connect first.",
+            incident_id,
+        )
 
     return IncidentResponse(
         incident_id=incident_id,
@@ -167,65 +151,25 @@ async def create_incident(
     )
 
 
-@router.get("/incidents", response_model=IncidentsListResponse)
-async def list_incidents(
+# ---------------------------------------------------------------------------
+# GET /api/incidents  (thin pass-through — main.py also serves this with fixtures)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/incidents/list", response_model=IncidentsListResponse)
+async def list_incidents_direct(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
-    source_filter: Optional[str] = Query(None, alias="source"),
+    repository: Optional[str] = Query(None),
 ) -> IncidentsListResponse:
-    """
-    GET /api/incidents
-
-    List incidents with optional filters.
-    """
+    """Raw MongoDB incident list (no fixture blending)."""
     try:
         incidents, total = IncidentStore.list_incidents(
-            skip=skip,
-            limit=limit,
-            status=status_filter,
-            source=source_filter,
+            skip=skip, limit=limit, status=status_filter, repository=repository
         )
-        # Convert MongoDB ObjectId to string in timeline
         for inc in incidents:
-            if inc.get("_id"):
-                del inc["_id"]
-        return IncidentsListResponse(
-            incidents=incidents,
-            total=total,
-            page=skip // limit,
-            page_size=limit,
-        )
+            inc.pop("_id", None)
+        return IncidentsListResponse(incidents=incidents, total=total, page=skip // max(limit, 1), page_size=limit)
     except Exception as exc:
-        logger.error("Failed to list incidents: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch incidents",
-        )
-
-
-@router.get("/incidents/{incident_id}")
-async def get_incident(incident_id: str):
-    """
-    GET /api/incidents/{incident_id}
-
-    Get full incident detail.
-    """
-    try:
-        incident = IncidentStore.get_incident(incident_id)
-        if not incident:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Incident {incident_id} not found",
-            )
-        if incident.get("_id"):
-            del incident["_id"]
-        return incident
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Failed to fetch incident %s: %s", incident_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch incident",
-        )
+        logger.exception("list_incidents failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch incidents")

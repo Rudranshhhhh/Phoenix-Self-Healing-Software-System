@@ -209,19 +209,40 @@ jobs:
       - name: 12. Report Failure to Phoenix API
         if: failure() && !startsWith(github.head_ref || github.ref_name, 'phoenix/fix/')
         continue-on-error: true
+        env:
+          PHOENIX_URL: ${{ secrets.PHOENIX_URL }}
+          PHOENIX_WEBHOOK_SECRET: ${{ secrets.PHOENIX_WEBHOOK_SECRET }}
         run: |
-          LOGS=$(tail -c 2000 ci-reports/pytest-output.log 2>/dev/null || true)
-          if [ -z "$LOGS" ]; then LOGS="No logs available"; fi
-          FAILED_STEP="unknown"
-          for STEP in lint pytest docker_build docker_run_health; do
-            OUTCOME="${{ steps.lint.outcome }}"
-            if [ "$STEP" = "pytest" ]; then OUTCOME="${{ steps.pytest.outcome }}"; fi
-            if [ "$STEP" = "docker_build" ]; then OUTCOME="${{ steps.docker_build.outcome }}"; fi
-            if [ "$STEP" = "docker_run_health" ]; then OUTCOME="${{ steps.docker_run_health.outcome }}"; fi
-            if [ "$OUTCOME" != "success" ]; then FAILED_STEP="$STEP"; break; fi
-          done
+          # Resolve the Phoenix API URL — must be set in GitHub Actions secrets
+          TARGET_URL="${PHOENIX_URL:-https://phoenix-api-v89i.onrender.com}"
+          TARGET_SECRET="${PHOENIX_WEBHOOK_SECRET}"
 
-          jq -n \
+          if [ -z "$TARGET_SECRET" ]; then
+            echo "ERROR: PHOENIX_WEBHOOK_SECRET secret is not set in GitHub Actions."
+            echo "Go to Settings → Secrets → Actions and add PHOENIX_WEBHOOK_SECRET."
+            exit 1
+          fi
+
+          # Collect the last 4000 chars of pytest output for evidence
+          LOGS=""
+          if [ -f ci-reports/pytest-output.log ]; then
+            LOGS=$(tail -c 4000 ci-reports/pytest-output.log | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+          fi
+          if [ -z "$LOGS" ]; then LOGS="No pytest output available"; fi
+
+          # Identify the first failing step accurately
+          FAILED_STEP="unknown"
+          if [ "${{ steps.lint.outcome }}" != "success" ]; then
+            FAILED_STEP="lint"
+          elif [ "${{ steps.pytest.outcome }}" != "success" ]; then
+            FAILED_STEP="pytest"
+          elif [ "${{ steps.docker_build.outcome }}" != "success" ]; then
+            FAILED_STEP="docker_build"
+          elif [ "${{ steps.docker_run_health.outcome }}" != "success" ]; then
+            FAILED_STEP="docker_run_health"
+          fi
+
+          PAYLOAD=$(jq -n \
             --arg source "github_ci" \
             --arg repository "${{ github.repository }}" \
             --arg commit "${{ github.sha }}" \
@@ -232,15 +253,31 @@ jobs:
             --arg job "validate" \
             --arg stage "$FAILED_STEP" \
             --arg logs "$LOGS" \
-            '{source:$source, repository:$repository, commit:$commit, branch:$branch,
-              run_id:$run_id, run_url:$run_url, workflow:$workflow, job:$job,
-              stage:$stage, logs:$logs}' |
-          curl -sS -X POST "${{ secrets.PHOENIX_URL || 'http://localhost:8000' }}/api/incidents" \
+            '{source:$source,repository:$repository,commit:$commit,branch:$branch,
+              run_id:$run_id,run_url:$run_url,workflow:$workflow,job:$job,
+              stage:$stage,logs:$logs}')
+
+          echo "Sending failure to Phoenix API at $TARGET_URL ..."
+          HTTP_CODE=$(curl -s -o /tmp/phoenix_response.txt -w "%{http_code}" \
+            -X POST "${TARGET_URL}/api/incidents" \
             -H "Content-Type: application/json" \
-            -H "X-Phoenix-Token: ${{ secrets.PHOENIX_WEBHOOK_SECRET || 'local-dev-secret' }}" \
-            -d @-
-          
-          echo "✓ Failure reported to Phoenix API"
+            -H "X-Phoenix-Token: ${TARGET_SECRET}" \
+            -d "$PAYLOAD" \
+            --max-time 30)
+
+          echo "Phoenix API response (HTTP $HTTP_CODE):"
+          cat /tmp/phoenix_response.txt
+
+          if [ "$HTTP_CODE" = "202" ]; then
+            echo "✓ Incident successfully reported to Phoenix"
+          elif [ "$HTTP_CODE" = "401" ]; then
+            echo "ERROR: Phoenix rejected the token (401). Check PHOENIX_WEBHOOK_SECRET secret matches Render env var."
+            exit 1
+          elif [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ Incident reported (duplicate or already known)"
+          else
+            echo "WARNING: Phoenix returned HTTP $HTTP_CODE"
+          fi
 
   frontend:
     name: Frontend TypeScript and Production Build

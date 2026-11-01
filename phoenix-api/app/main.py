@@ -15,7 +15,7 @@ from app.database import close_database, init_database
 from app.routers.github import router as github_router
 from app.routers.agent_jobs import router as agent_jobs_router
 from app.routers.analysis import router as analysis_router
-from app.routers.incidents import create_incident
+from app.routers.incidents import router as incidents_router
 from app.incident_store import IncidentStore
 from app.config import config
 
@@ -46,10 +46,11 @@ app.add_middleware(
     allow_credentials=True,   # required so the session cookie is sent/received
 )
 
-# Mount the GitHub OAuth + repo-read router
+# Mount all routers
 app.include_router(github_router)
 app.include_router(agent_jobs_router)
 app.include_router(analysis_router)
+app.include_router(incidents_router)
 
 
 @app.on_event("startup")
@@ -183,11 +184,3 @@ def ingest_event(event: IngestEvent, x_phoenix_token: Optional[str] = Header(def
         return store.apply(event)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-app.add_api_route(
-    "/api/incidents",
-    create_incident,
-    methods=["POST"],
-    status_code=202,
-)
