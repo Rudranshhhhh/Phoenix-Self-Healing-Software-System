@@ -27,3 +27,16 @@ or generates a conservative Python/Node Dockerfile, builds a temporary image,
 starts a temporary container, probes common health endpoints, and reports
 observed build, health, CPU, memory, container, and log data to the dashboard.
 Docker Desktop must be running before selecting a repository.
+
+## Automatic repository monitoring
+
+Selecting a repository also registers Phoenix's signed `workflow_run` webhook
+and creates `.github/workflows/phoenix-monitor.yml` when that file does not
+already exist. The workflow runs on pushes and pull requests, detects common
+Node and Python projects, runs their declared checks, and builds an existing
+Dockerfile. A failed completed run is delivered through the webhook, queued
+as a Phoenix incident, and then processed by the local agent.
+
+Phoenix never overwrites an existing workflow at that path. Re-select the
+repository after reauthorizing GitHub if the OAuth scope was changed to include
+repository hook administration.

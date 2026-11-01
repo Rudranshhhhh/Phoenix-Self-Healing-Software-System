@@ -27,13 +27,24 @@ def _script_port(script: str) -> int | None:
 
 def _candidate_ports(root: pathlib.Path, dockerfile: pathlib.Path) -> list[int]:
     text = dockerfile.read_text(encoding="utf-8", errors="replace")
-    ports = [int(value) for value in re.findall(r"^\s*EXPOSE\s+(\d+)", text, re.MULTILINE)]
-    if ports:
-        return list(dict.fromkeys(ports))
     plan = detect_project(root)
+    ports = [int(value) for value in re.findall(r"^\s*EXPOSE\s+(\d+)", text, re.MULTILINE)]
+    command_ports = [
+        int(value)
+        for value in re.findall(
+            r"(?:--port[=\s]+|--port[\"']?\s*,\s*[\"']?|PORT[=\s])(\d{2,5})",
+            text,
+            re.IGNORECASE,
+        )
+    ]
+    if ports:
+        return list(dict.fromkeys(ports + command_ports))
+    ports.extend(command_ports)
     if plan.language == "javascript":
-        return [3000, 5173, 4173, 8080]
-    return [8000, 8080, 5000]
+        ports.extend((3000, 5173, 4173, 8080))
+    else:
+        ports.extend((8000, 8080, 5000))
+    return list(dict.fromkeys(ports))
 
 
 def _generated_dockerfile(root: pathlib.Path) -> str:

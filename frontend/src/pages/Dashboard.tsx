@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useIncident, useIncidentList } from "../hooks/useIncidentList";
 import { useSession } from "../state/SessionContext";
@@ -10,7 +10,12 @@ import { SHOW_REJECTED } from "../lib/flags";
 import { LiveHero } from "../components/incidents/LiveHero";
 import { isActive } from "../lib/incident";
 import { REPO } from "../lib/repo";
-import { getRepositoryAnalysis } from "../api/phoenix";
+import {
+  getRepoBranches,
+  getRepoCommits,
+  getRepoContents,
+  getRepositoryAnalysis,
+} from "../api/phoenix";
 import { usePolling } from "../hooks/usePolling";
 
 const HERO_FRESH_MS = 10 * 60 * 1000;
@@ -49,6 +54,23 @@ export default function Dashboard() {
   }, [params.owner, params.repo, sessionRepo]);
 
   const isDemo = !sessionRepo && !params.owner;
+  const intelligenceEnabled = Boolean(user && !isDemo);
+  const [treePath, setTreePath] = useState("");
+  const branchesFetcher = useCallback(
+    (signal: AbortSignal) => getRepoBranches(repo.owner, repo.name, signal),
+    [repo.owner, repo.name],
+  );
+  const commitsFetcher = useCallback(
+    (signal: AbortSignal) => getRepoCommits(repo.owner, repo.name, repo.defaultBranch, signal),
+    [repo.owner, repo.name, repo.defaultBranch],
+  );
+  const contentsFetcher = useCallback(
+    (signal: AbortSignal) => getRepoContents(repo.owner, repo.name, treePath, repo.defaultBranch, signal),
+    [repo.owner, repo.name, repo.defaultBranch, treePath],
+  );
+  const branches = usePolling(branchesFetcher, 30000, intelligenceEnabled);
+  const commits = usePolling(commitsFetcher, 15000, intelligenceEnabled);
+  const contents = usePolling(contentsFetcher, 30000, intelligenceEnabled);
   const { incidents, loading, error } = incidentList;
   const visible = useMemo(
     () => (SHOW_REJECTED ? incidents : incidents.filter((i) => i.status !== "rejected")),
@@ -126,7 +148,7 @@ export default function Dashboard() {
                 <span className="rounded-box border border-line bg-subtle px-3 py-2">
                   Health: {analysis.data.result.health?.healthy
                     ? `${analysis.data.result.health.path} · HTTP ${analysis.data.result.health.status_code}`
-                    : "failed"}
+                    : `failed${analysis.data.result.health?.error ? ` · ${analysis.data.result.health.error}` : ""}`}
                 </span>
                 <span className="rounded-box border border-line bg-subtle px-3 py-2">
                   CPU: {analysis.data.result.resources?.["CPUPerc"] ?? "unavailable"}
@@ -141,7 +163,109 @@ export default function Dashboard() {
                 {analysis.data.result.logs}
               </pre>
             )}
+            {analysis.data.result?.error && (
+              <p className="mt-3 break-words text-[13px] text-muted">
+                Agent error: {analysis.data.result.error}
+              </p>
+            )}
             {analysis.error && <p className="mt-3 text-[13px] text-muted">Analysis unavailable; retrying…</p>}
+          </section>
+        )}
+
+        {intelligenceEnabled && (
+          <section className="mb-6 rounded-box border border-line bg-surface px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[16px] font-semibold text-ink">Repository intelligence</h2>
+                <p className="mt-1 text-[13px] text-muted">
+                  Live metadata from GitHub for {repo.owner}/{repo.name}.
+                </p>
+              </div>
+              <a
+                href={`https://github.com/${repo.owner}/${repo.name}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
+              >
+                Open on GitHub
+              </a>
+            </div>
+            <div className="mt-4 grid gap-3 text-[13px] sm:grid-cols-3">
+              <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                Branches: {branches.data?.branches.length ?? "loading…"}
+              </span>
+              <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                Root entries: {contents.data?.type === "directory" ? contents.data.entries.length : "loading…"}
+              </span>
+              <span className="rounded-box border border-line bg-subtle px-3 py-2">
+                Latest push: {commits.data?.commits[0]?.date
+                  ? new Date(commits.data.commits[0].date).toLocaleString()
+                  : "loading…"}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-box border border-line bg-subtle p-3">
+                <h3 className="text-[13px] font-semibold text-ink">Latest commits</h3>
+                <ul className="mt-2 space-y-2">
+                  {(commits.data?.commits ?? []).slice(0, 5).map((commit) => (
+                    <li key={commit.sha} className="flex items-start gap-2 text-[12px]">
+                      <code className="shrink-0 text-muted">{commit.shortSha}</code>
+                      <a
+                        href={commit.htmlUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 truncate text-body hover:text-ink"
+                        title={commit.message}
+                      >
+                        {commit.message}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-box border border-line bg-subtle p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="truncate text-[13px] font-semibold text-ink">
+                    {treePath || "Root"} · {repo.defaultBranch}
+                  </h3>
+                  {treePath && (
+                    <button
+                      type="button"
+                      onClick={() => setTreePath(treePath.split("/").slice(0, -1).join("/"))}
+                      className="shrink-0 text-[12px] text-muted underline-offset-2 hover:text-ink hover:underline"
+                    >
+                      Up
+                    </button>
+                  )}
+                </div>
+                <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                  {(contents.data?.type === "directory" ? contents.data.entries : []).map((entry) => (
+                    <li key={entry.path} className="truncate text-[12px] text-body">
+                      {entry.type === "dir" ? (
+                        <button
+                          type="button"
+                          onClick={() => setTreePath(entry.path)}
+                          className="text-left hover:text-ink hover:underline"
+                        >
+                          <span className="mr-1 text-muted">▸</span>
+                          {entry.name}
+                        </button>
+                      ) : (
+                        <span>
+                          <span className="mr-1 text-muted">·</span>
+                          {entry.name}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            {(branches.error || commits.error || contents.error) && (
+              <p className="mt-3 text-[12px] text-muted">
+                Some GitHub repository details could not be loaded; retrying automatically.
+              </p>
+            )}
           </section>
         )}
 

@@ -1,5 +1,5 @@
 """
-Phoenix API — GitHub OAuth Router
+Phoenix API â€” GitHub OAuth Router
 
 Endpoints
 ---------
@@ -7,7 +7,7 @@ GET  /api/github/login
     Redirects the browser to GitHub's OAuth authorization page.
     Generates a one-time `state` parameter to prevent CSRF.
 
-GET  /api/github/callback?code=…&state=…
+GET  /api/github/callback?code=â€¦&state=â€¦
     GitHub redirects here after the user grants permission.
     Exchanges the code for an access token, stores it server-side in a
     signed session cookie, then redirects the browser to /connect/callback
@@ -52,6 +52,7 @@ import logging
 import hashlib
 import hmac
 import json
+import base64
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -81,6 +82,45 @@ GITHUB_API_BASE = "https://api.github.com"
 # which is what Phoenix needs to clone, read diffs, and open PRs.
 OAUTH_SCOPES = "repo,read:user,admin:repo_hook"
 
+PHOENIX_WORKFLOW_PATH = ".github/workflows/phoenix-monitor.yml"
+PHOENIX_WORKFLOW = """name: Phoenix Monitor
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate repository
+        shell: bash
+        run: |
+          set -e
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          fi
+          if [ -f package.json ]; then
+            node -e 'const p=require("./package.json"); if (p.scripts?.lint) process.exit(require("child_process").spawnSync("npm",["run","lint"],{stdio:"inherit"}).status ?? 1)'
+            node -e 'const p=require("./package.json"); if (p.scripts?.test) process.exit(require("child_process").spawnSync("npm",["test"],{stdio:"inherit"}).status ?? 1)'
+            node -e 'const p=require("./package.json"); if (p.scripts?.build) process.exit(require("child_process").spawnSync("npm",["run","build"],{stdio:"inherit"}).status ?? 1)'
+          elif [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            python -m pip install --upgrade pip
+            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+            if [ -d tests ]; then pip install pytest; pytest -q; fi
+          else
+            echo "Phoenix could not detect a supported project manifest."
+          fi
+          if [ -f Dockerfile ]; then docker build -t phoenix-monitor:ci .; fi
+"""
+
 # Where the frontend expects to land after a successful OAuth round-trip.
 FRONTEND_CALLBACK = f"{config.FRONTEND_URL}/connect/callback"
 
@@ -97,6 +137,43 @@ def _require_oauth_config() -> None:
                 "GitHub OAuth is not configured. "
                 "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in your .env file."
             ),
+        )
+
+
+async def _ensure_monitoring_workflow(repository: dict[str, Any], token: str) -> None:
+    """Create Phoenix's generic CI workflow without overwriting repository code."""
+    url = f"{GITHUB_API_BASE}/repos/{repository['owner']}/{repository['name']}/contents/{PHOENIX_WORKFLOW_PATH}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        existing = await client.get(url, headers=headers, params={"ref": repository["defaultBranch"]})
+        if existing.status_code == 200:
+            return
+        if existing.status_code not in (404,):
+            raise HTTPException(
+                status_code=502,
+                detail="Repository connected, but Phoenix could not inspect its monitoring workflow.",
+            )
+        content = base64.b64encode(PHOENIX_WORKFLOW.encode("utf-8")).decode("ascii")
+        payload: dict[str, Any] = {
+            "message": "chore: configure Phoenix monitoring",
+            "content": content,
+            "branch": repository["defaultBranch"],
+        }
+        response = await client.put(url, headers=headers, json=payload)
+    if response.status_code not in (200, 201):
+        logger.error(
+            "Could not install Phoenix workflow for %s: HTTP %s %s",
+            repository["fullName"],
+            response.status_code,
+            response.text[:300],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Repository connected, but Phoenix could not install its monitoring workflow.",
         )
 
 
@@ -136,7 +213,7 @@ async def _github_get(path: str, token: str, **params: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Step 1 — Redirect to GitHub
+# Step 1 â€” Redirect to GitHub
 # ---------------------------------------------------------------------------
 
 
@@ -161,7 +238,7 @@ def github_login() -> RedirectResponse:
 
 
 # ---------------------------------------------------------------------------
-# Step 2 — GitHub callback: exchange code → token → set cookie → redirect
+# Step 2 â€” GitHub callback: exchange code â†’ token â†’ set cookie â†’ redirect
 # ---------------------------------------------------------------------------
 
 
@@ -226,7 +303,7 @@ async def github_callback(
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — /me: who is signed in?
+# Step 3 â€” /me: who is signed in?
 # ---------------------------------------------------------------------------
 
 
@@ -294,6 +371,7 @@ async def set_selection(
     sessions.set_selected_repo(phoenix_session, connected)
     AnalysisStore.enqueue(selected["fullName"], profile.get("login", ""))
     await _ensure_workflow_webhook(selected, token)
+    await _ensure_monitoring_workflow(selected, token)
     return JSONResponse({"repository": connected})
 
 
@@ -403,7 +481,7 @@ async def github_webhook(
 
 
 # ---------------------------------------------------------------------------
-# Repos — list
+# Repos â€” list
 # ---------------------------------------------------------------------------
 
 
@@ -449,7 +527,7 @@ async def list_repos(
 
 
 # ---------------------------------------------------------------------------
-# Repos — single repo metadata
+# Repos â€” single repo metadata
 # ---------------------------------------------------------------------------
 
 
@@ -480,7 +558,7 @@ async def get_repo(
 
 
 # ---------------------------------------------------------------------------
-# Repos — branches
+# Repos â€” branches
 # ---------------------------------------------------------------------------
 
 
@@ -506,7 +584,7 @@ async def list_branches(
 
 
 # ---------------------------------------------------------------------------
-# Repos — commits
+# Repos â€” commits
 # ---------------------------------------------------------------------------
 
 
@@ -541,7 +619,7 @@ async def list_commits(
 
 
 # ---------------------------------------------------------------------------
-# Repos — file / directory contents
+# Repos â€” file / directory contents
 # ---------------------------------------------------------------------------
 
 
@@ -606,7 +684,7 @@ async def get_contents(
 
 
 # ---------------------------------------------------------------------------
-# Repos — diff for a specific commit
+# Repos â€” diff for a specific commit
 # ---------------------------------------------------------------------------
 
 
