@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 _PY_TRACEBACK = re.compile(r'File ["\']([^"\']+)["\'], line (\d+)')
 
 # TypeScript tsc: src/phoenix-bug.ts(7,14): error TS2322: Type 'string' ...
-_TS_ERROR = re.compile(r'([^\s(]+\.[jt]sx?)\((\d+),\d+\): error (TS\d+): (.+)')
+# Also handles GitHub Actions annotation prefix: ##[error]src/file.ts(7,14): ...
+_TS_ERROR = re.compile(r'(?:##\[error\])?([^\s(]+\.[jt]sx?)\((\d+),\d+\): error (TS\d+): (.+)')
 
 # ESLint: path/to/file.js:10:5: error Description
 _ESLINT = re.compile(r'([^\s]+\.[jt]sx?):(\d+):\d+: error (.+)')
@@ -178,7 +179,8 @@ def _read_snippet(repo_path: pathlib.Path, relative: str, line: int, context: in
     if path is None:
         return None
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        text = path.read_text(encoding="utf-8-sig", errors="replace")  # utf-8-sig strips BOM
+        lines = text.splitlines()
         start = max(0, line - context - 1)
         end   = min(len(lines), line + context)
         return "\n".join(lines[start:end])
@@ -192,7 +194,7 @@ def _read_file_full(repo_path: pathlib.Path, relative: str, max_chars: int = 300
     if path is None:
         return None
     try:
-        return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
+        return path.read_text(encoding="utf-8-sig", errors="replace")[:max_chars]  # utf-8-sig strips BOM
     except OSError:
         return None
 
