@@ -12,6 +12,8 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from agent.ai.llm_engine import LLMEngine
 from agent.sandbox import SandboxPipeline
@@ -45,6 +47,18 @@ class AgentWorker:
         self.worker_id = os.environ.get("PHOENIX_AGENT_ID", f"worker-{uuid.uuid4().hex[:8]}")
         self.poll_seconds = float(os.environ.get("PHOENIX_AGENT_POLL_SECONDS", "5"))
         self.session = requests.Session()
+        retry = Retry(
+            total=4,
+            connect=4,
+            read=4,
+            backoff_factor=1,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET", "POST"}),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def run_forever(self) -> None:
         while True:
@@ -52,7 +66,10 @@ class AgentWorker:
                 if not self.process_one():
                     time.sleep(self.poll_seconds)
             except Exception:
-                logger.exception("Agent worker iteration failed")
+                logger.warning(
+                    "Agent worker iteration failed; retrying in %.1fs",
+                    self.poll_seconds,
+                )
                 time.sleep(self.poll_seconds)
 
     def process_one(self) -> bool:
