@@ -1,0 +1,45 @@
+name: Phoenix Monitor
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Run checks
+        shell: bash
+        run: |
+          set -e
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          if [ -d tests ]; then
+            pip install pytest && pytest -q
+          fi
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          fi
+          if [ -f package.json ]; then
+            npm test --if-present
+            npm run build --if-present
+          fi
