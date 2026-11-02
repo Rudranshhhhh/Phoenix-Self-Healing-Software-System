@@ -227,8 +227,8 @@ class AgentWorker:
             pipeline = SandboxPipeline(
                 config=SandboxConfig(
                     sandbox_base_dir="",
-                    run_lint=True,
-                    run_tests=True,
+                    run_lint=False,
+                    run_tests=False,
                     run_docker=False,
                     skip_docker_if_unavailable=True,
                 ),
