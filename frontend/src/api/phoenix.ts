@@ -68,12 +68,24 @@ async function writeJson<T>(path: string, method: "PUT", body: unknown): Promise
 
 export function getIncidents(repository?: string, signal?: AbortSignal): Promise<IncidentListResponse> {
   const query = repository ? `?page_size=100&repository=${encodeURIComponent(repository)}` : "?page_size=100";
-  return getJson<IncidentWireList>(`/api/incidents${query}`, signal).then((response) => ({
-    items: response.items ?? response.incidents.map(toSummary),
-    total: response.total,
-    page: response.page,
-    page_size: response.page_size,
-  }));
+  return getJson<IncidentWireList>(`/api/incidents${query}`, signal).then((response) => {
+    // Use MongoDB incidents if present, fall back to legacy items (demo fixtures)
+    const mongoIncidents = (response.incidents ?? []).map(toSummary);
+    const legacyItems = response.items ?? [];
+    // Merge: mongo wins on id clash, then sorted by updated_at desc
+    const byId = new Map<string, IncidentSummary>();
+    for (const item of legacyItems) byId.set(item.id, item);
+    for (const item of mongoIncidents) byId.set(item.id, item);  // mongo overwrites legacy
+    const merged = Array.from(byId.values()).sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+    return {
+      items: merged.length > 0 ? merged : legacyItems,
+      total: response.total,
+      page: response.page,
+      page_size: response.page_size,
+    };
+  });
 }
 
 export function getIncident(id: string, signal?: AbortSignal): Promise<Incident> {
